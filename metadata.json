@@ -1,0 +1,5 @@
+{
+  "name": "GitHub Release Monitor",
+  "description": "A GitHub release monitor with changelogs and dashboard.",
+  "requestFramePermissions": []
+}

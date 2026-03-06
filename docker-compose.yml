@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/app/data/github-monitor.db
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    restart: unless-stopped
