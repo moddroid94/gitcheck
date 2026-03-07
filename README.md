@@ -1,4 +1,4 @@
-# GitHub Release Monitor
+# GitCheck - A GitHub Release Monitor
 
 A simple application to monitor GitHub repository releases.
 <img width="1387" height="932" alt="image" src="https://github.com/user-attachments/assets/af609f66-7bb9-4ce9-8f55-ec6c32c7072a" />
