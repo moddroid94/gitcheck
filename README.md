@@ -1,6 +1,7 @@
 # GitHub Release Monitor
 
 A simple application to monitor GitHub repository releases.
+<img width="1387" height="932" alt="image" src="https://github.com/user-attachments/assets/af609f66-7bb9-4ce9-8f55-ec6c32c7072a" />
 
 ## Features
 
@@ -18,7 +19,7 @@ Create a `.env` file with the following variables:
 
 ```env
 GITHUB_TOKEN=your_github_token # Optional, for higher rate limits
-CHECK_INTERVAL=60 # Minutes
+WEB_PORT=9595
 ```
 
 ## Usage
