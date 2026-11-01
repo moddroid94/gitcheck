@@ -23,6 +23,21 @@ interface ReleaseModalProps {
   onUpdate?: () => void;
 }
 
+const markdownComponents = {
+  a: ({ href, children, ...props }: any) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 dark:text-blue-400 hover:underline font-medium inline-flex items-center gap-1"
+      onClick={(e) => e.stopPropagation()}
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+};
+
 export const ReleaseModal: React.FC<ReleaseModalProps> = ({ isOpen, onClose, release, installedVersion, onUpdate }) => {
   const [updating, setUpdating] = useState(false);
 
@@ -106,14 +121,14 @@ export const ReleaseModal: React.FC<ReleaseModalProps> = ({ isOpen, onClose, rel
                   className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  View on GitHub
+                  View on {release.html_url.includes('aur.archlinux.org') ? 'AUR' : 'GitHub'}
                 </a>
               )}
             </div>
           </div>
 
           <div className="prose prose-sm max-w-none prose-blue dark:prose-invert">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
               {release.body || '*No description provided.*'}
             </ReactMarkdown>
           </div>

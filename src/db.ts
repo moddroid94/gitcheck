@@ -6,6 +6,13 @@ const db = new Database(dbPath);
 
 // Initialize Database
 db.exec(`
+  CREATE TABLE IF NOT EXISTS groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    color TEXT DEFAULT '#3B82F6',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS monitored_repos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     owner TEXT NOT NULL,
@@ -16,9 +23,11 @@ db.exec(`
     stargazers_count INTEGER,
     avatar_url TEXT,
     check_interval INTEGER DEFAULT 60,
+    group_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(owner, repo)
+    UNIQUE(owner, repo),
+    FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS releases (
@@ -49,28 +58,44 @@ const addColumn = (table: string, column: string, type: string) => {
   }
 };
 
+addColumn('monitored_repos', 'source_type', "TEXT DEFAULT 'github'");
 addColumn('monitored_repos', 'description', 'TEXT');
 addColumn('monitored_repos', 'language', 'TEXT');
 addColumn('monitored_repos', 'stargazers_count', 'INTEGER');
+addColumn('monitored_repos', 'popularity', 'REAL');
 addColumn('monitored_repos', 'avatar_url', 'TEXT');
 addColumn('monitored_repos', 'check_interval', 'INTEGER DEFAULT 60');
 addColumn('monitored_repos', 'updated_at', "DATETIME DEFAULT '1970-01-01 00:00:00'");
 addColumn('monitored_repos', 'include_prereleases', 'BOOLEAN DEFAULT 0');
 addColumn('monitored_repos', 'installed_version', 'TEXT');
+addColumn('monitored_repos', 'group_id', 'INTEGER');
 addColumn('releases', 'prerelease', 'BOOLEAN DEFAULT 0');
+
+export interface Group {
+  id: number;
+  name: string;
+  color?: string;
+  created_at?: string;
+  repo_count?: number;
+}
 
 export interface Repo {
   id: number;
   owner: string;
   repo: string;
+  source_type?: 'github' | 'aur';
   last_tag: string;
   installed_version?: string;
   description?: string;
   language?: string;
   stargazers_count?: number;
+  popularity?: number;
   avatar_url?: string;
   check_interval: number;
   include_prereleases: number; // 0 or 1
+  group_id?: number | null;
+  group_name?: string | null;
+  group_color?: string | null;
   created_at: string;
   updated_at: string;
   latest_release_body?: string;
@@ -91,41 +116,92 @@ export interface Release {
   prerelease: number; // 0 or 1
 }
 
+// Group Queries
+export const getGroups = (): Group[] => {
+  return db.prepare(`
+    SELECT 
+      g.*, 
+      (SELECT COUNT(*) FROM monitored_repos r WHERE r.group_id = g.id) as repo_count
+    FROM groups g
+    ORDER BY g.name ASC
+  `).all() as Group[];
+};
+
+export const getGroup = (id: number): Group | undefined => {
+  return db.prepare('SELECT * FROM groups WHERE id = ?').get(id) as Group | undefined;
+};
+
+export const addGroup = (name: string, color: string = '#3B82F6'): { lastInsertRowid: number | bigint } => {
+  try {
+    const stmt = db.prepare('INSERT INTO groups (name, color) VALUES (?, ?)');
+    return stmt.run(name, color);
+  } catch (error: any) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      throw new Error('Group name already exists');
+    }
+    throw error;
+  }
+};
+
+export const updateGroup = (id: number, details: { name?: string; color?: string }) => {
+  const sets = Object.keys(details).map((key) => `${key} = @${key}`).join(', ');
+  if (!sets) return;
+  const stmt = db.prepare(`UPDATE groups SET ${sets} WHERE id = @id`);
+  return stmt.run({ ...details, id });
+};
+
+export const deleteGroup = (id: number) => {
+  db.prepare('UPDATE monitored_repos SET group_id = NULL WHERE group_id = ?').run(id);
+  return db.prepare('DELETE FROM groups WHERE id = ?').run(id);
+};
+
+// Repo Queries
 export const getRepos = (): Repo[] => {
   return db.prepare(`
     SELECT 
       r.*, 
+      g.name as group_name,
+      g.color as group_color,
       rel.body as latest_release_body,
       rel.html_url as latest_release_html_url,
       rel.published_at as latest_release_published_at,
       rel.name as latest_release_name
     FROM monitored_repos r
+    LEFT JOIN groups g ON g.id = r.group_id
     LEFT JOIN releases rel ON rel.repo_id = r.id AND rel.tag_name = r.last_tag
     ORDER BY r.updated_at DESC
   `).all() as Repo[];
 };
 
 export const getRepo = (id: number): Repo | undefined => {
-  return db.prepare('SELECT * FROM monitored_repos WHERE id = ?').get(id) as Repo | undefined;
+  return db.prepare(`
+    SELECT r.*, g.name as group_name, g.color as group_color
+    FROM monitored_repos r
+    LEFT JOIN groups g ON g.id = r.group_id
+    WHERE r.id = ?
+  `).get(id) as Repo | undefined;
 };
 
 export const addRepo = (owner: string, repo: string, details: Partial<Repo> = {}) => {
   try {
     const stmt = db.prepare(`
-      INSERT INTO monitored_repos (owner, repo, description, language, stargazers_count, avatar_url, updated_at, include_prereleases, installed_version, last_tag, check_interval)
-      VALUES (@owner, @repo, @description, @language, @stargazers_count, @avatar_url, CURRENT_TIMESTAMP, @include_prereleases, @installed_version, @last_tag, @check_interval)
+      INSERT INTO monitored_repos (owner, repo, source_type, description, language, stargazers_count, popularity, avatar_url, updated_at, include_prereleases, installed_version, last_tag, check_interval, group_id)
+      VALUES (@owner, @repo, @source_type, @description, @language, @stargazers_count, @popularity, @avatar_url, CURRENT_TIMESTAMP, @include_prereleases, @installed_version, @last_tag, @check_interval, @group_id)
     `);
     return stmt.run({ 
       owner, 
       repo, 
+      source_type: 'github',
       description: null, 
       language: null, 
       stargazers_count: null, 
+      popularity: null,
       avatar_url: null, 
       include_prereleases: 0,
       installed_version: null,
       last_tag: null,
       check_interval: 60,
+      group_id: null,
       ...details 
     });
   } catch (error: any) {

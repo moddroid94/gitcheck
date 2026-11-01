@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Star, GitBranch, Calendar, ExternalLink, Trash2, Settings, ArrowUpCircle, CheckCircle, RefreshCw, ChevronRight, FileText } from 'lucide-react';
+import { Star, GitBranch, Calendar, ExternalLink, Trash2, Settings, ArrowUpCircle, CheckCircle, RefreshCw, ChevronRight, FileText, User, ThumbsUp, Flame } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -14,6 +14,21 @@ interface RepoCardProps {
   onUpdate: () => void;
 }
 
+const markdownComponents = {
+  a: ({ href, children, ...props }: any) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 font-medium"
+      onClick={(e) => e.stopPropagation()}
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+};
+
 export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, onUpdate }) => {
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -27,7 +42,6 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
     try {
       await axios.post(`/api/repos/${repo.id}/refresh`);
       onUpdate();
-      // Optional: Add a visual success indicator here if needed
     } catch (error: any) {
       console.error('Failed to refresh repo', error);
       const errorMessage = error.response?.data?.error || error.message;
@@ -44,13 +58,14 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
   const getLastChecked = () => {
     if (!repo.updated_at) return null;
     try {
-      // Ensure UTC parsing by replacing space with T and adding Z if needed
       const dateStr = repo.updated_at.replace(' ', 'T') + (repo.updated_at.includes('Z') ? '' : 'Z');
       return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
     } catch (e) {
       return 'Unknown';
     }
   };
+
+  const isAur = repo.source_type === 'aur';
 
   return (
     <>
@@ -61,30 +76,60 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               {repo.avatar_url ? (
-                <img src={repo.avatar_url} alt={repo.owner} className="w-10 h-10 rounded-full border border-gray-100 dark:border-gray-600" />
+                <img src={repo.avatar_url} alt={repo.owner} className="w-10 h-10 rounded-full border border-gray-100 dark:border-gray-600 object-contain p-0.5 bg-white dark:bg-gray-800 shrink-0" />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 font-bold text-lg">
-                  {repo.owner[0].toUpperCase()}
+                <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 font-bold text-lg shrink-0">
+                  {repo.owner[0]?.toUpperCase() || 'A'}
                 </div>
               )}
               <div>
-                <h3 className="font-bold text-gray-900 dark:text-white leading-tight text-lg">
-                  <a
-                    href={`https://github.com/${repo.owner}/${repo.repo}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {repo.repo}
-                  </a>
-                </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{repo.owner}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isAur ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'}`}>
+                    {isAur ? 'AUR' : 'GitHub'}
+                  </span>
+                  <h3 className="font-bold text-gray-900 dark:text-white leading-tight text-lg">
+                    <a
+                      href={isAur ? `https://aur.archlinux.org/packages/${repo.repo}` : `https://github.com/${repo.owner}/${repo.repo}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {repo.repo}
+                    </a>
+                  </h3>
+                  {repo.group_name && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                      style={{
+                        borderColor: (repo.group_color || '#3B82F6') + '50',
+                        backgroundColor: (repo.group_color || '#3B82F6') + '15',
+                        color: repo.group_color || '#3B82F6',
+                      }}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{ backgroundColor: repo.group_color || '#3B82F6' }}
+                      />
+                      {repo.group_name}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
+                  {isAur ? (
+                    <>
+                      <User className="w-3.5 h-3.5 text-purple-500" />
+                      <span>Maintainer: <strong className="text-gray-700 dark:text-gray-300">{repo.owner || 'Orphaned'}</strong></span>
+                    </>
+                  ) : (
+                    <span>{repo.owner}</span>
+                  )}
+                </p>
               </div>
             </div>
             
             {/* Actions */}
-            <div className="flex gap-1">
+            <div className="flex gap-1 shrink-0">
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -175,7 +220,9 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
               onClick={() => setShowReleaseModal(true)}
             >
               <div className="prose prose-xs max-w-none text-gray-600 dark:text-gray-300 line-clamp-4 group-hover/changelog:text-gray-900 dark:group-hover/changelog:text-white transition-colors dark:prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{repo.latest_release_body}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {repo.latest_release_body}
+                </ReactMarkdown>
               </div>
               <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-gray-800 to-transparent"></div>
               <button className="mt-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1 opacity-0 group-hover/changelog:opacity-100 transition-opacity">
@@ -189,20 +236,39 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
 
         {/* Footer Metadata */}
         <div className="px-5 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 rounded-b-xl">
-          <div className="flex items-center gap-3">
-            {repo.language && (
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                {repo.language}
+          {isAur ? (
+            <div className="flex items-center gap-3 overflow-x-auto">
+              <div className="flex items-center gap-1 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800/40" title="AUR Package Maintainer">
+                <User className="w-3 h-3 text-purple-500" />
+                <span className="font-medium truncate max-w-[100px]">{repo.owner || 'Orphaned'}</span>
               </div>
-            )}
-            <div className="flex items-center gap-1">
-              <Star className="w-3 h-3" />
-              {repo.stargazers_count?.toLocaleString() || 0}
+              <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800/40" title="AUR Package Votes">
+                <ThumbsUp className="w-3 h-3 text-emerald-500" />
+                <span className="font-semibold">{repo.stargazers_count?.toLocaleString() || 0}</span>
+              </div>
+              {repo.popularity !== undefined && repo.popularity !== null && (
+                <div className="flex items-center gap-1 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800/40" title="AUR Package Popularity">
+                  <Flame className="w-3 h-3 text-amber-500" />
+                  <span className="font-semibold">{repo.popularity.toFixed(2)}</span>
+                </div>
+              )}
             </div>
-          </div>
-          <div>
-             {repo.updated_at && `Checked ${getLastChecked()}`}
+          ) : (
+            <div className="flex items-center gap-3">
+              {repo.language && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  {repo.language}
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <Star className="w-3 h-3" />
+                {repo.stargazers_count?.toLocaleString() || 0}
+              </div>
+            </div>
+          )}
+          <div className="shrink-0 text-[11px]">
+             {repo.updated_at && getLastChecked()}
           </div>
         </div>
       </div>
