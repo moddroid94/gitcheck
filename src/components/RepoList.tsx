@@ -14,12 +14,14 @@ import {
   Folder,
   FolderPlus,
   Grid,
+  List,
   ListFilter,
   CheckCircle2,
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { AddRepoForm } from './AddRepoForm';
 import { RepoCard } from './RepoCard';
+import { RepoRow } from './RepoRow';
 import { RepoDetails } from './RepoDetails';
 import { GroupManagerModal } from './GroupManagerModal';
 import { SettingsPage } from './SettingsPage';
@@ -29,7 +31,7 @@ import { useTheme } from '../context/ThemeContext';
 
 type SortOption = 'updated_at' | 'stargazers_count' | 'name';
 type SortOrder = 'asc' | 'desc';
-type ViewMode = 'grid' | 'grouped';
+type ViewMode = 'grid' | 'list' | 'grouped';
 
 export const RepoList: React.FC = () => {
   const [repos, setRepos] = useState<Repo[]>([]);
@@ -398,6 +400,17 @@ export const RepoList: React.FC = () => {
               <Grid className="w-4 h-4" />
             </button>
             <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+              }`}
+              title="List View"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => setViewMode('grouped')}
               className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
                 viewMode === 'grouped'
@@ -497,7 +510,7 @@ export const RepoList: React.FC = () => {
         </div>
       )}
 
-      {/* Repo Cards Display */}
+      {/* Repo Cards & List Display */}
       {!loading && filteredAndSortedRepos.length > 0 && (
         viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -510,6 +523,34 @@ export const RepoList: React.FC = () => {
                 onUpdate={() => loadData(true)}
               />
             ))}
+          </div>
+        ) : viewMode === 'list' ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/80 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Repository</th>
+                    <th className="py-3 px-4">Installed</th>
+                    <th className="py-3 px-4">Latest Release</th>
+                    <th className="py-3 px-4">Stats</th>
+                    <th className="py-3 px-4">Last Checked</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredAndSortedRepos.map((repo) => (
+                    <RepoRow
+                      key={repo.id}
+                      repo={repo}
+                      onDelete={(id) => setRepoToDelete(id)}
+                      onSelect={setSelectedRepo}
+                      onUpdate={() => loadData(true)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           /* Grouped View Section */
