@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, FileText, Loader2, Save, CheckCircle, User, ThumbsUp, Flame, ExternalLink } from 'lucide-react';
+import { X, Settings, FileText, Loader2, Save, CheckCircle, User, ThumbsUp, Flame, ExternalLink, Bell, BellOff } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import axios from 'axios';
-import { Repo, Release, Group } from '../db';
+import { Repo, Release, Group } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 
 interface RepoDetailsProps {
@@ -34,6 +34,7 @@ export const RepoDetails: React.FC<RepoDetailsProps> = ({ repo, onClose, onUpdat
   const [loading, setLoading] = useState(false);
   const [checkInterval, setCheckInterval] = useState(repo.check_interval || 60);
   const [includePrereleases, setIncludePrereleases] = useState(!!repo.include_prereleases);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(repo.notifications_enabled !== 0);
   const [installedVersion, setInstalledVersion] = useState(repo.installed_version || '');
   const [groupId, setGroupId] = useState<string>(repo.group_id ? String(repo.group_id) : '');
   const [updating, setUpdating] = useState(false);
@@ -79,6 +80,7 @@ export const RepoDetails: React.FC<RepoDetailsProps> = ({ repo, onClose, onUpdat
       await axios.put(`/api/repos/${repo.id}`, { 
         check_interval: checkInterval,
         include_prereleases: includePrereleases ? 1 : 0,
+        notifications_enabled: notificationsEnabled ? 1 : 0,
         installed_version: installedVersion || null,
         group_id: groupId ? parseInt(groupId) : null,
       });
@@ -318,8 +320,29 @@ export const RepoDetails: React.FC<RepoDetailsProps> = ({ repo, onClose, onUpdat
                       onChange={(e) => setIncludePrereleases(e.target.checked)}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
                     />
-                    <label htmlFor="prereleases" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label htmlFor="prereleases" className="block text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
                       Include Pre-releases
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-start gap-2.5 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30">
+                    <input
+                      type="checkbox"
+                      id="notificationsEnabled"
+                      checked={notificationsEnabled}
+                      onChange={(e) => setNotificationsEnabled(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 cursor-pointer"
+                    />
+                    <label htmlFor="notificationsEnabled" className="block text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                      <span className="font-medium text-gray-900 dark:text-white flex items-center gap-1.5">
+                        {notificationsEnabled ? <Bell className="w-4 h-4 text-blue-500" /> : <BellOff className="w-4 h-4 text-gray-400" />}
+                        Enable Notifications for this App
+                      </span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        When enabled, release alerts will be sent to your configured Telegram and Webhook destinations when a new version is detected.
+                      </p>
                     </label>
                   </div>
                 </div>

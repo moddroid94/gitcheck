@@ -1,8 +1,9 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import { getRepos, addRepo, removeRepo, updateLastTag, updateRepo, addRelease, getReleases as getDbReleases, getRepo, touchRepo, getGroups, addGroup, updateGroup, deleteGroup } from './src/db';
+import { getRepos, addRepo, removeRepo, updateLastTag, updateRepo, addRelease, getReleases as getDbReleases, getRepo, touchRepo, getGroups, addGroup, updateGroup, deleteGroup, getSystemSettings, updateSystemSettings } from './src/db';
 import { getLatestRelease, getRepoDetails, getReleases as getGithubReleases } from './src/services/github';
 import { getAurPackageInfo } from './src/services/aur';
+import { notificationService } from './src/services/notifications';
 import cron from 'node-cron';
 import { config } from './src/config';
 
@@ -149,6 +150,63 @@ app.delete('/api/groups/:id', (req, res) => {
   }
 });
 
+// API Routes - System Settings & Notifications
+app.get('/api/settings', (req, res) => {
+  try {
+    const settings = getSystemSettings();
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+app.put('/api/settings', (req, res) => {
+  try {
+    updateSystemSettings(req.body);
+    const updated = getSystemSettings();
+    res.json({ message: 'Settings saved successfully', settings: updated });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+app.get('/api/notifications/channels', (req, res) => {
+  try {
+    const settings = getSystemSettings();
+    const providers = notificationService.getProviders().map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      enabled: p.isEnabled(settings),
+    }));
+    res.json(providers);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch notification providers' });
+  }
+});
+
+app.post('/api/notifications/test', async (req, res) => {
+  const { channel_id, settings } = req.body;
+  if (!channel_id) {
+    return res.status(400).json({ error: 'channel_id is required' });
+  }
+
+  try {
+    // Merge existing stored settings with any in-flight test settings passed in request body
+    const currentSettings = getSystemSettings();
+    const mergedSettings = { ...currentSettings, ...(settings || {}) };
+
+    const result = await notificationService.testChannel(channel_id, mergedSettings);
+    if (result.success) {
+      res.json({ success: true, message: result.message || 'Test notification sent successfully!' });
+    } else {
+      res.status(400).json({ success: false, error: result.error || 'Failed to send test notification' });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to execute test notification' });
+  }
+});
+
 // API Routes - Repos
 app.get('/api/repos', (req, res) => {
   try {
@@ -170,7 +228,7 @@ app.get('/api/repos/:id', (req, res) => {
 });
 
 app.post('/api/repos', async (req, res) => {
-  let { owner, repo, source_type, input_string, check_interval, include_prereleases, installed_version, group_id } = req.body;
+  let { owner, repo, source_type, input_string, check_interval, include_prereleases, installed_version, group_id, notifications_enabled } = req.body;
 
   if (input_string || (!source_type && owner && (owner.includes('/') || owner.startsWith('aur:') || owner.startsWith('gh:')))) {
     const raw = input_string || (owner.includes('/') || owner.startsWith('aur:') || owner.startsWith('gh:') ? owner : `${owner}/${repo}`);
@@ -192,6 +250,14 @@ app.post('/api/repos', async (req, res) => {
   }
 
   source_type = source_type || 'github';
+
+  const sysSettings = getSystemSettings();
+  const effectiveCheckInterval = check_interval !== undefined && check_interval !== null ? Number(check_interval) : sysSettings.default_check_interval;
+  const effectiveIncludePrereleases = include_prereleases !== undefined && include_prereleases !== null ? !!include_prereleases : sysSettings.default_include_prereleases;
+  const effectiveGroupId = group_id !== undefined ? (group_id ? parseInt(group_id) : null) : sysSettings.default_group_id;
+  const effectiveNotificationsEnabled = notifications_enabled !== undefined && notifications_enabled !== null
+    ? (notifications_enabled ? 1 : 0)
+    : (sysSettings.default_notifications_enabled ? 1 : 0);
 
   try {
     if (source_type === 'aur') {
@@ -215,9 +281,10 @@ app.post('/api/repos', async (req, res) => {
         avatar_url: avatarUrl,
         last_tag: versionTag,
         include_prereleases: 0,
-        check_interval: check_interval || 60,
+        check_interval: effectiveCheckInterval,
         installed_version: installed_version || null,
-        group_id: group_id ? parseInt(group_id) : null,
+        group_id: effectiveGroupId,
+        notifications_enabled: effectiveNotificationsEnabled,
       });
 
       if (result.lastInsertRowid) {
@@ -257,10 +324,11 @@ app.post('/api/repos', async (req, res) => {
       stargazers_count: details.stargazers_count,
       avatar_url: details.owner.avatar_url,
       last_tag,
-      include_prereleases: include_prereleases ? 1 : 0,
-      check_interval: check_interval || 60,
+      include_prereleases: effectiveIncludePrereleases ? 1 : 0,
+      check_interval: effectiveCheckInterval,
       installed_version: installed_version || null,
-      group_id: group_id ? parseInt(group_id) : null,
+      group_id: effectiveGroupId,
+      notifications_enabled: effectiveNotificationsEnabled,
     });
 
     // Fetch and store last 5 releases
@@ -292,7 +360,7 @@ app.post('/api/repos', async (req, res) => {
 
 // Bulk add repositories / packages
 app.post('/api/repos/bulk', async (req, res) => {
-  const { repos: inputRepos, group_id, check_interval, include_prereleases } = req.body;
+  const { repos: inputRepos, group_id, check_interval, include_prereleases, notifications_enabled } = req.body;
   if (!inputRepos) {
     return res.status(400).json({ error: 'Repository list is required' });
   }
@@ -346,6 +414,14 @@ app.post('/api/repos/bulk', async (req, res) => {
   let failCount = invalidEntries.length;
   let skippedCount = 0;
 
+  const sysSettings = getSystemSettings();
+  const effectiveBulkInterval = check_interval !== undefined && check_interval !== null ? Number(check_interval) : sysSettings.default_check_interval;
+  const effectiveBulkPrereleases = include_prereleases !== undefined && include_prereleases !== null ? !!include_prereleases : sysSettings.default_include_prereleases;
+  const effectiveBulkGroupId = group_id !== undefined ? (group_id ? parseInt(group_id) : null) : sysSettings.default_group_id;
+  const effectiveBulkNotifications = notifications_enabled !== undefined && notifications_enabled !== null
+    ? (notifications_enabled ? 1 : 0)
+    : (sysSettings.default_notifications_enabled ? 1 : 0);
+
   for (const item of itemsToProcess) {
     const { owner, repo, sourceType } = item;
     try {
@@ -372,8 +448,9 @@ app.post('/api/repos/bulk', async (req, res) => {
           avatar_url: avatarUrl,
           last_tag: versionTag,
           include_prereleases: 0,
-          check_interval: check_interval || 60,
-          group_id: group_id ? parseInt(group_id) : null,
+          check_interval: effectiveBulkInterval,
+          group_id: effectiveBulkGroupId,
+          notifications_enabled: effectiveBulkNotifications,
         });
 
         if (result.lastInsertRowid) {
@@ -404,7 +481,7 @@ app.post('/api/repos/bulk', async (req, res) => {
           throw err;
         }
 
-        const release = await getLatestRelease(owner, repo, !!include_prereleases);
+        const release = await getLatestRelease(owner, repo, effectiveBulkPrereleases);
         const last_tag = release ? release.tag_name : null;
 
         const result = addRepo(owner, repo, {
@@ -414,9 +491,10 @@ app.post('/api/repos/bulk', async (req, res) => {
           stargazers_count: details.stargazers_count,
           avatar_url: details.owner.avatar_url,
           last_tag,
-          include_prereleases: include_prereleases ? 1 : 0,
-          check_interval: check_interval || 60,
-          group_id: group_id ? parseInt(group_id) : null,
+          include_prereleases: effectiveBulkPrereleases ? 1 : 0,
+          check_interval: effectiveBulkInterval,
+          group_id: effectiveBulkGroupId,
+          notifications_enabled: effectiveBulkNotifications,
         });
 
         try {
@@ -469,14 +547,15 @@ app.post('/api/repos/bulk', async (req, res) => {
 
 app.put('/api/repos/:id', (req, res) => {
   const { id } = req.params;
-  const { check_interval, include_prereleases, installed_version, group_id } = req.body;
+  const { check_interval, include_prereleases, installed_version, group_id, notifications_enabled } = req.body;
 
   try {
     const updates: any = {};
     if (check_interval !== undefined) updates.check_interval = check_interval;
-    if (include_prereleases !== undefined) updates.include_prereleases = include_prereleases;
+    if (include_prereleases !== undefined) updates.include_prereleases = include_prereleases ? 1 : 0;
     if (installed_version !== undefined) updates.installed_version = installed_version;
     if (group_id !== undefined) updates.group_id = group_id === null ? null : parseInt(group_id);
+    if (notifications_enabled !== undefined) updates.notifications_enabled = notifications_enabled ? 1 : 0;
 
     updateRepo(parseInt(id), updates);
     res.json({ message: 'Repo updated successfully' });
@@ -549,18 +628,42 @@ const updateRepoReleases = async (repo: any, forceRefresh = false) => {
         const versionTag = aurInfo.Version;
         const ownerName = aurInfo.Maintainer || 'aur';
         
-        addRelease({
+        const releaseRecord = {
+          id: 0,
           repo_id: repo.id,
           tag_name: versionTag,
           name: `AUR ${aurInfo.Name} ${versionTag}`,
           body: `**Maintainer:** ${aurInfo.Maintainer || 'Orphaned'} | **Votes:** ${aurInfo.NumVotes} | **Popularity:** ${aurInfo.Popularity.toFixed(2)}${aurInfo.OutOfDate ? ' | ⚠️ **Out of Date**' : ''}\n\n${aurInfo.Description}\n\n[AUR Package Page](https://aur.archlinux.org/packages/${aurInfo.Name})${aurInfo.URL ? ` • [Upstream Website](${aurInfo.URL})` : ''}`,
           published_at: aurInfo.LastModified ? new Date(aurInfo.LastModified * 1000).toISOString() : new Date().toISOString(),
           html_url: `https://aur.archlinux.org/packages/${aurInfo.Name}`,
-        });
+          created_at: new Date().toISOString(),
+          prerelease: 0,
+        };
+
+        addRelease(releaseRecord);
 
         if (versionTag !== repo.last_tag) {
           console.log(`New release found for AUR ${repo.repo}: ${versionTag}`);
           updateLastTag(repo.id, versionTag);
+
+          // Dispatch notifications asynchronously (if enabled for this repo)
+          if (repo.notifications_enabled !== 0) {
+            try {
+              const settings = getSystemSettings();
+              notificationService.notifyAll({
+                repo: { ...repo, last_tag: versionTag },
+                release: releaseRecord,
+              }, settings).then(results => {
+                for (const r of results) {
+                  console.log(`[Notification ${r.name}] ${r.success ? 'Delivered' : 'Failed'}: ${r.message || r.error}`);
+                }
+              }).catch(e => console.error('Notification dispatch failed', e));
+            } catch (notifErr) {
+              console.error('Failed to trigger notifications for AUR package', notifErr);
+            }
+          } else {
+            console.log(`Notifications disabled for AUR ${repo.repo}, skipping dispatch.`);
+          }
         } else {
           touchRepo(repo.id);
         }
@@ -578,18 +681,42 @@ const updateRepoReleases = async (repo: any, forceRefresh = false) => {
       // GitHub
       const release = await getLatestRelease(repo.owner, repo.repo, !!repo.include_prereleases, forceRefresh);
       if (release) {
-        addRelease({
+        const releaseRecord = {
+          id: 0,
           repo_id: repo.id,
           tag_name: release.tag_name,
           name: release.name,
           body: release.body,
           published_at: release.published_at,
           html_url: release.html_url,
-        });
+          created_at: new Date().toISOString(),
+          prerelease: release.prerelease ? 1 : 0,
+        };
+
+        addRelease(releaseRecord);
 
         if (release.tag_name !== repo.last_tag) {
           console.log(`New release found for ${repo.owner}/${repo.repo}: ${release.tag_name}`);
           updateLastTag(repo.id, release.tag_name);
+
+          // Dispatch notifications asynchronously (if enabled for this repo)
+          if (repo.notifications_enabled !== 0) {
+            try {
+              const settings = getSystemSettings();
+              notificationService.notifyAll({
+                repo: { ...repo, last_tag: release.tag_name },
+                release: releaseRecord,
+              }, settings).then(results => {
+                for (const r of results) {
+                  console.log(`[Notification ${r.name}] ${r.success ? 'Delivered' : 'Failed'}: ${r.message || r.error}`);
+                }
+              }).catch(e => console.error('Notification dispatch failed', e));
+            } catch (notifErr) {
+              console.error('Failed to trigger notifications for GitHub repo', notifErr);
+            }
+          } else {
+            console.log(`Notifications disabled for GitHub repo ${repo.owner}/${repo.repo}, skipping dispatch.`);
+          }
         } else {
           touchRepo(repo.id);
         }

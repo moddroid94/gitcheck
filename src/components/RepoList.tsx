@@ -16,13 +16,15 @@ import {
   Grid,
   ListFilter,
   CheckCircle2,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { AddRepoForm } from './AddRepoForm';
 import { RepoCard } from './RepoCard';
 import { RepoDetails } from './RepoDetails';
 import { GroupManagerModal } from './GroupManagerModal';
+import { SettingsPage } from './SettingsPage';
 import { Modal } from './Modal';
-import { Repo, Group } from '../db';
+import { Repo, Group } from '../types';
 import { useTheme } from '../context/ThemeContext';
 
 type SortOption = 'updated_at' | 'stargazers_count' | 'name';
@@ -51,6 +53,7 @@ export const RepoList: React.FC = () => {
   const [showUpdatesOnly, setShowUpdatesOnly] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addModalTab, setAddModalTab] = useState<'single' | 'bulk'>('single');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const fetchGroups = async () => {
     try {
@@ -180,6 +183,15 @@ export const RepoList: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
+  if (isSettingsOpen) {
+    return (
+      <SettingsPage
+        onBack={() => setIsSettingsOpen(false)}
+        groups={groups}
+      />
+    );
+  }
+
   return (
     <div className="w-full p-4 sm:p-6 max-w-7xl mx-auto">
       {/* Header Bar */}
@@ -206,6 +218,14 @@ export const RepoList: React.FC = () => {
             title="Refresh List"
           >
             <RefreshCw className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg transition-colors text-sm font-medium border border-gray-200 dark:border-gray-700"
+            title="Settings & Notifications"
+          >
+            <SettingsIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            <span>Settings</span>
           </button>
           <button
             onClick={() => openAddModal('bulk')}

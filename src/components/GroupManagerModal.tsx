@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { Folder, Plus, Edit2, Trash2, Check, X, Palette, AlertCircle } from 'lucide-react';
-import { Group } from '../db';
+import { Group } from '../types';
 import { Modal } from './Modal';
 
 interface GroupManagerModalProps {

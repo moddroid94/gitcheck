@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Star, GitBranch, Calendar, ExternalLink, Trash2, Settings, ArrowUpCircle, CheckCircle, RefreshCw, ChevronRight, FileText, User, ThumbsUp, Flame } from 'lucide-react';
+import { Star, GitBranch, Calendar, ExternalLink, Trash2, Settings, ArrowUpCircle, CheckCircle, RefreshCw, ChevronRight, FileText, User, ThumbsUp, Flame, Bell, BellOff } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import axios from 'axios';
-import { Repo } from '../db';
+import { Repo } from '../types';
 import { ReleaseModal } from './ReleaseModal';
 
 interface RepoCardProps {
@@ -128,37 +128,57 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
               </div>
             </div>
             
-            {/* Actions */}
-            <div className="flex gap-1 shrink-0">
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className={`p-1.5 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors ${refreshing ? 'animate-spin text-blue-600 dark:text-blue-400' : ''}`}
-                title="Check for updates"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect(repo);
-                }}
-                className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title="Settings & Details"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(repo.id);
-                }}
-                className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                title="Delete Repository"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+              {/* Actions */}
+              <div className="flex gap-1 shrink-0">
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const nextVal = repo.notifications_enabled === 0 ? 1 : 0;
+                    try {
+                      await axios.put(`/api/repos/${repo.id}`, { notifications_enabled: nextVal });
+                      onUpdate();
+                    } catch (err) {
+                      console.error('Failed to toggle notifications', err);
+                    }
+                  }}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    repo.notifications_enabled !== 0
+                      ? 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 opacity-60 hover:opacity-100'
+                  }`}
+                  title={repo.notifications_enabled !== 0 ? 'Notifications Enabled (Click to Mute)' : 'Notifications Muted (Click to Enable)'}
+                >
+                  {repo.notifications_enabled !== 0 ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className={`p-1.5 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors ${refreshing ? 'animate-spin text-blue-600 dark:text-blue-400' : ''}`}
+                  title="Check for updates"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(repo);
+                  }}
+                  className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  title="Settings & Details"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(repo.id);
+                  }}
+                  className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                  title="Delete Repository"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
           </div>
         </div>
 

@@ -42,6 +42,12 @@ db.exec(`
     UNIQUE(repo_id, tag_name),
     FOREIGN KEY(repo_id) REFERENCES monitored_repos(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Attempt to add new columns to existing table if they don't exist
@@ -69,52 +75,12 @@ addColumn('monitored_repos', 'updated_at', "DATETIME DEFAULT '1970-01-01 00:00:0
 addColumn('monitored_repos', 'include_prereleases', 'BOOLEAN DEFAULT 0');
 addColumn('monitored_repos', 'installed_version', 'TEXT');
 addColumn('monitored_repos', 'group_id', 'INTEGER');
+addColumn('monitored_repos', 'notifications_enabled', 'BOOLEAN DEFAULT 1');
 addColumn('releases', 'prerelease', 'BOOLEAN DEFAULT 0');
 
-export interface Group {
-  id: number;
-  name: string;
-  color?: string;
-  created_at?: string;
-  repo_count?: number;
-}
-
-export interface Repo {
-  id: number;
-  owner: string;
-  repo: string;
-  source_type?: 'github' | 'aur';
-  last_tag: string;
-  installed_version?: string;
-  description?: string;
-  language?: string;
-  stargazers_count?: number;
-  popularity?: number;
-  avatar_url?: string;
-  check_interval: number;
-  include_prereleases: number; // 0 or 1
-  group_id?: number | null;
-  group_name?: string | null;
-  group_color?: string | null;
-  created_at: string;
-  updated_at: string;
-  latest_release_body?: string;
-  latest_release_html_url?: string;
-  latest_release_published_at?: string;
-  latest_release_name?: string;
-}
-
-export interface Release {
-  id: number;
-  repo_id: number;
-  tag_name: string;
-  name: string;
-  body: string;
-  published_at: string;
-  html_url: string;
-  created_at: string;
-  prerelease: number; // 0 or 1
-}
+import { Group, Repo, Release, SystemSettings, DEFAULT_SYSTEM_SETTINGS } from './types';
+export type { Group, Repo, Release, SystemSettings };
+export { DEFAULT_SYSTEM_SETTINGS };
 
 // Group Queries
 export const getGroups = (): Group[] => {
@@ -185,8 +151,8 @@ export const getRepo = (id: number): Repo | undefined => {
 export const addRepo = (owner: string, repo: string, details: Partial<Repo> = {}) => {
   try {
     const stmt = db.prepare(`
-      INSERT INTO monitored_repos (owner, repo, source_type, description, language, stargazers_count, popularity, avatar_url, updated_at, include_prereleases, installed_version, last_tag, check_interval, group_id)
-      VALUES (@owner, @repo, @source_type, @description, @language, @stargazers_count, @popularity, @avatar_url, CURRENT_TIMESTAMP, @include_prereleases, @installed_version, @last_tag, @check_interval, @group_id)
+      INSERT INTO monitored_repos (owner, repo, source_type, description, language, stargazers_count, popularity, avatar_url, updated_at, include_prereleases, installed_version, last_tag, check_interval, group_id, notifications_enabled)
+      VALUES (@owner, @repo, @source_type, @description, @language, @stargazers_count, @popularity, @avatar_url, CURRENT_TIMESTAMP, @include_prereleases, @installed_version, @last_tag, @check_interval, @group_id, @notifications_enabled)
     `);
     return stmt.run({ 
       owner, 
@@ -202,6 +168,7 @@ export const addRepo = (owner: string, repo: string, details: Partial<Repo> = {}
       last_tag: null,
       check_interval: 60,
       group_id: null,
+      notifications_enabled: 1,
       ...details 
     });
   } catch (error: any) {
@@ -242,6 +209,50 @@ export const addRelease = (release: Partial<Release>) => {
 
 export const getReleases = (repoId: number): Release[] => {
   return db.prepare('SELECT * FROM releases WHERE repo_id = ? ORDER BY published_at DESC').all(repoId) as Release[];
+};
+
+
+
+export const getSystemSettings = (): SystemSettings => {
+  const rows = db.prepare('SELECT key, value FROM system_settings').all() as Array<{ key: string; value: string }>;
+  const map: Record<string, string> = {};
+  for (const row of rows) {
+    map[row.key] = row.value;
+  }
+
+  return {
+    default_check_interval: map.default_check_interval ? parseInt(map.default_check_interval, 10) : DEFAULT_SYSTEM_SETTINGS.default_check_interval,
+    default_include_prereleases: map.default_include_prereleases !== undefined ? map.default_include_prereleases === 'true' : DEFAULT_SYSTEM_SETTINGS.default_include_prereleases,
+    default_notifications_enabled: map.default_notifications_enabled !== undefined ? map.default_notifications_enabled === 'true' : DEFAULT_SYSTEM_SETTINGS.default_notifications_enabled,
+    default_group_id: map.default_group_id && map.default_group_id !== 'null' ? parseInt(map.default_group_id, 10) : null,
+    telegram_enabled: map.telegram_enabled === 'true',
+    telegram_bot_token: map.telegram_bot_token || '',
+    telegram_chat_id: map.telegram_chat_id || '',
+    telegram_template: map.telegram_template || DEFAULT_SYSTEM_SETTINGS.telegram_template,
+    webhook_enabled: map.webhook_enabled === 'true',
+    webhook_url: map.webhook_url || '',
+    webhook_headers: map.webhook_headers || DEFAULT_SYSTEM_SETTINGS.webhook_headers,
+    webhook_payload_type: (map.webhook_payload_type as 'json' | 'form') || 'json',
+    webhook_template: map.webhook_template || DEFAULT_SYSTEM_SETTINGS.webhook_template,
+  };
+};
+
+export const updateSystemSettings = (settings: Partial<SystemSettings>) => {
+  const upsert = db.prepare(`
+    INSERT INTO system_settings (key, value, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+  `);
+
+  const runTx = db.transaction((entries: [string, any][]) => {
+    for (const [key, val] of entries) {
+      if (val !== undefined) {
+        upsert.run(key, val === null ? 'null' : String(val));
+      }
+    }
+  });
+
+  runTx(Object.entries(settings));
 };
 
 export default db;

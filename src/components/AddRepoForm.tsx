@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Loader2, Search, Settings, ChevronDown, ChevronUp, Folder, Layers, UserPlus } from 'lucide-react';
-import { Group } from '../db';
+import { Group } from '../types';
 import { BulkAddRepoForm } from './BulkAddRepoForm';
 
 interface AddRepoFormProps {
@@ -24,10 +24,33 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
   const [selectedGroupId, setSelectedGroupId] = useState<string>(defaultGroupId ? String(defaultGroupId) : '');
   const [checkInterval, setCheckInterval] = useState(60);
   const [includePrereleases, setIncludePrereleases] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [installedVersion, setInstalledVersion] = useState('');
   const [showOptions, setShowOptions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Fetch system default settings if available
+  useEffect(() => {
+    axios.get('/api/settings').then((res) => {
+      if (res.data) {
+        if (res.data.default_check_interval) {
+          setCheckInterval(res.data.default_check_interval);
+        }
+        if (res.data.default_include_prereleases !== undefined) {
+          setIncludePrereleases(res.data.default_include_prereleases);
+        }
+        if (res.data.default_notifications_enabled !== undefined) {
+          setNotificationsEnabled(res.data.default_notifications_enabled);
+        }
+        if (!defaultGroupId && res.data.default_group_id) {
+          setSelectedGroupId(String(res.data.default_group_id));
+        }
+      }
+    }).catch(() => {
+      // Ignore fallback if network error
+    });
+  }, [defaultGroupId]);
 
   const handleSubmitSingle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +69,7 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
         input_string: cleanInput,
         check_interval: Number(checkInterval),
         include_prereleases: includePrereleases,
+        notifications_enabled: notificationsEnabled,
         installed_version: installedVersion || null,
         group_id: selectedGroupId ? parseInt(selectedGroupId) : null,
       });
@@ -193,7 +217,7 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
                     className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                   />
                 </div>
-                <div className="md:col-span-2">
+                <div className="md:col-span-2 space-y-2 pt-1">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -202,6 +226,16 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
                       className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-700 dark:text-gray-300">Include Pre-releases</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notificationsEnabled}
+                      onChange={(e) => setNotificationsEnabled(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Enable Release Notifications</span>
                   </label>
                 </div>
               </div>
