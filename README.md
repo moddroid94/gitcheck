@@ -21,7 +21,7 @@ Create a `.env` file with the following variables:
 
 ```env
 GITHUB_TOKEN=your_github_token # Optional, for higher rate limits
-WEB_PORT=9595
+WEB_PORT=6767
 ```
 
 ## Usage
