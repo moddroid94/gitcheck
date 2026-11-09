@@ -1,16 +1,18 @@
-# GitCheck - A GitHub Release Monitor
+# GitCheck - A GitHub/AUR Release Monitor
 
 A simple application to monitor GitHub repository releases.
-<img width="1387" height="932" alt="image" src="https://github.com/user-attachments/assets/af609f66-7bb9-4ce9-8f55-ec6c32c7072a" />
+<img width="1894" height="1025" alt="dms_capture_1794237780209" src="https://github.com/user-attachments/assets/fe84a296-a42b-4874-8e0a-356633e30951" />
+
 
 ## Features
 
-- Monitor multiple GitHub repositories.
-- Dashboard with repository cards showing details (stars, language, last release).
-- View full changelogs for releases.
+- Monitor multiple GitHub /AUR repositories.
+- Dashboard repo card and info (grid or list view)
+- View full changelog for releases.
 - Per-repository configuration (check interval).
 - Check for new releases periodically.
 - Simple web interface to manage repositories.
+- Telegram and Webhooks notifications with per-repo toggle and template vars.
 - No authentication required.
 
 ## Configuration
@@ -47,3 +49,7 @@ WEB_PORT=9595
 ## Database
 
 The application uses a SQLite database (`github-monitor.db`) to store monitored repositories and their last seen release tag.
+
+## Other Screenshots
+
+<img width="1894" height="1025" alt="image" src="https://github.com/user-attachments/assets/1059cd84-88c2-4ea5-aec9-250aba97600b" />
