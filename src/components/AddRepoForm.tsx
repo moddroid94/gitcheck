@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Plus, Loader2, Search, Settings, ChevronDown, ChevronUp, Folder, Layers, UserPlus } from 'lucide-react';
+import { Plus, Loader2, Search, Settings, ChevronDown, ChevronUp, Folder, Layers } from 'lucide-react';
 import { Group } from '../types';
 import { BulkAddRepoForm } from './BulkAddRepoForm';
 
@@ -30,26 +30,26 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Fetch system default settings if available
   useEffect(() => {
-    axios.get('/api/settings').then((res) => {
-      if (res.data) {
-        if (res.data.default_check_interval) {
-          setCheckInterval(res.data.default_check_interval);
+    axios
+      .get('/api/settings')
+      .then((res) => {
+        if (res.data) {
+          if (res.data.default_check_interval) {
+            setCheckInterval(res.data.default_check_interval);
+          }
+          if (res.data.default_include_prereleases !== undefined) {
+            setIncludePrereleases(res.data.default_include_prereleases);
+          }
+          if (res.data.default_notifications_enabled !== undefined) {
+            setNotificationsEnabled(res.data.default_notifications_enabled);
+          }
+          if (!defaultGroupId && res.data.default_group_id) {
+            setSelectedGroupId(String(res.data.default_group_id));
+          }
         }
-        if (res.data.default_include_prereleases !== undefined) {
-          setIncludePrereleases(res.data.default_include_prereleases);
-        }
-        if (res.data.default_notifications_enabled !== undefined) {
-          setNotificationsEnabled(res.data.default_notifications_enabled);
-        }
-        if (!defaultGroupId && res.data.default_group_id) {
-          setSelectedGroupId(String(res.data.default_group_id));
-        }
-      }
-    }).catch(() => {
-      // Ignore fallback if network error
-    });
+      })
+      .catch(() => {});
   }, [defaultGroupId]);
 
   const handleSubmitSingle = async (e: React.FormEvent) => {
@@ -59,7 +59,7 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
 
     const cleanInput = repoString.trim();
     if (!cleanInput) {
-      setError('Please enter a repository identifier or URL');
+      setError('PLEASE ENTER A REPOSITORY IDENTIFIER OR URL');
       setLoading(false);
       return;
     }
@@ -81,39 +81,39 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
       setShowOptions(false);
       onRepoAdded();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to add repository');
+      setError(err.response?.data?.error || 'FAILED TO ADD REPOSITORY');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full font-mono">
       {/* Tabs Header */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 mb-5">
+      <div className="flex border-b border-zinc-200 dark:border-zinc-800 mb-5">
         <button
           type="button"
           onClick={() => setActiveTab('single')}
-          className={`flex items-center gap-2 py-2.5 px-4 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center gap-2 py-2.5 px-4 text-xs uppercase font-bold border-b-2 transition-colors ${
             activeTab === 'single'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+              : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
           }`}
         >
-          <Plus className="w-4 h-4" />
-          Single Repository / Package
+          <Plus className="w-3.5 h-3.5" />
+          SINGLE REPOSITORY / PKG
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('bulk')}
-          className={`flex items-center gap-2 py-2.5 px-4 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center gap-2 py-2.5 px-4 text-xs uppercase font-bold border-b-2 transition-colors ${
             activeTab === 'bulk'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+              : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
           }`}
         >
-          <Layers className="w-4 h-4" />
-          Bulk Import
+          <Layers className="w-3.5 h-3.5" />
+          BULK IMPORT
         </button>
       </div>
 
@@ -128,49 +128,49 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
           <div className="flex flex-col gap-4">
             {/* Main Input */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Repository (GitHub or AUR Package)
+              <label className="block text-[0.65rem] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1">
+                REPOSITORY (GITHUB OR AUR PACKAGE)
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-gray-400" />
+                  <Search className="h-4 w-4 text-zinc-400" />
                 </div>
                 <input
                   type="text"
                   value={repoString}
                   onChange={(e) => setRepoString(e.target.value)}
-                  placeholder="gh:facebook/react or aur:yay (or owner/repo / package name)"
-                  className="block w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-gray-50 dark:bg-gray-900/50 placeholder-gray-400 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-all"
+                  placeholder="gh:facebook/react or aur:yay"
+                  className="block w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder-zinc-400 text-xs font-mono uppercase focus:border-blue-500 outline-none"
                   required
                 />
               </div>
-              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                Prefixes: <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">gh:owner/repo</code> for GitHub, <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">aur:pkgname</code> for Arch User Repository.
+              <p className="mt-1 text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase">
+                PREFIXES: <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 text-blue-600 dark:text-blue-400">gh:owner/repo</code> FOR GITHUB, <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 text-purple-600 dark:text-purple-400">aur:pkgname</code> FOR AUR.
               </p>
             </div>
 
             {/* Group Selection */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                  <Folder className="w-3.5 h-3.5 text-gray-400" /> Group (Optional)
+                <label className="block text-[0.65rem] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1">
+                  <Folder className="w-3.5 h-3.5 text-zinc-400" /> GROUP (OPTIONAL)
                 </label>
                 {onOpenManageGroups && (
                   <button
                     type="button"
                     onClick={onOpenManageGroups}
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                    className="text-[0.65rem] text-blue-600 dark:text-blue-400 uppercase hover:underline"
                   >
-                    + Manage Groups
+                    + MANAGE GROUPS
                   </button>
                 )}
               </div>
               <select
                 value={selectedGroupId}
                 onChange={(e) => setSelectedGroupId(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer"
+                className="block w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-white text-xs uppercase font-mono cursor-pointer outline-none"
               >
-                <option value="">(No Group / Ungrouped)</option>
+                <option value="">(NO GROUP / UNGROUPED)</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}
@@ -183,59 +183,59 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
             <button
               type="button"
               onClick={() => setShowOptions(!showOptions)}
-              className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors w-fit pt-1"
+              className="flex items-center gap-2 text-xs uppercase font-bold text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors w-fit pt-1"
             >
-              <Settings className="w-4 h-4" />
-              {showOptions ? 'Hide Options' : 'Show Options'}
+              <Settings className="w-3.5 h-3.5" />
+              {showOptions ? 'HIDE OPTIONS' : 'SHOW OPTIONS'}
               {showOptions ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
 
             {/* Extended Options */}
             {showOptions && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-zinc-50 dark:bg-black/30 border border-zinc-200 dark:border-zinc-800 text-xs">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                    Check Interval (minutes)
+                  <label className="block text-[0.65rem] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
+                    CHECK INTERVAL (MINUTES)
                   </label>
                   <input
                     type="number"
                     min="1"
                     value={checkInterval}
                     onChange={(e) => setCheckInterval(parseInt(e.target.value) || 60)}
-                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                    className="block w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-xs font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                    Installed Version (optional)
+                  <label className="block text-[0.65rem] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
+                    INSTALLED VERSION (OPTIONAL)
                   </label>
                   <input
                     type="text"
                     value={installedVersion}
                     onChange={(e) => setInstalledVersion(e.target.value)}
                     placeholder="v1.0.0"
-                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                    className="block w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-xs font-mono"
                   />
                 </div>
                 <div className="md:col-span-2 space-y-2 pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer uppercase text-xs">
                     <input
                       type="checkbox"
                       checked={includePrereleases}
                       onChange={(e) => setIncludePrereleases(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      className="w-3.5 h-3.5 text-blue-600 rounded-none border-zinc-300"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Include Pre-releases</span>
+                    <span>INCLUDE PRE-RELEASES</span>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer uppercase text-xs">
                     <input
                       type="checkbox"
                       checked={notificationsEnabled}
                       onChange={(e) => setNotificationsEnabled(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      className="w-3.5 h-3.5 text-blue-600 rounded-none border-zinc-300"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Enable Release Notifications</span>
+                    <span>ENABLE RELEASE NOTIFICATIONS</span>
                   </label>
                 </div>
               </div>
@@ -245,14 +245,14 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs uppercase font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Add Repository
+              ADD REPOSITORY
             </button>
 
             {error && (
-              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400">
+              <div className="p-3 bg-red-500/10 border border-red-500/30 text-xs uppercase text-red-600 dark:text-red-400 font-bold">
                 {error}
               </div>
             )}

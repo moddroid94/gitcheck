@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Folder, Plus, Edit2, Trash2, Check, X, Palette, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, Palette, AlertCircle } from 'lucide-react';
 import { Group } from '../types';
 import { Modal } from './Modal';
 
@@ -51,7 +51,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       setNewGroupName('');
       onGroupsUpdated();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create group');
+      setError(err.response?.data?.error || 'FAILED TO CREATE GROUP');
     } finally {
       setLoading(false);
     }
@@ -82,7 +82,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       setEditingId(null);
       onGroupsUpdated();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update group');
+      setError(err.response?.data?.error || 'FAILED TO UPDATE GROUP');
     } finally {
       setLoading(false);
     }
@@ -96,50 +96,50 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       await axios.delete(`/api/groups/${id}`);
       onGroupsUpdated();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to delete group');
+      setError(err.response?.data?.error || 'FAILED TO DELETE GROUP');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Manage Repository Groups">
-      <div className="space-y-6">
+    <Modal isOpen={isOpen} onClose={onClose} title="MANAGE REPOSITORY GROUPS">
+      <div className="space-y-6 font-mono text-xs">
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm rounded-lg flex items-center gap-2">
+          <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 font-bold uppercase flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Create Group Form */}
-        <form onSubmit={handleCreateGroup} className="p-4 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
-          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-            Create New Group
+        <form onSubmit={handleCreateGroup} className="p-4 bg-zinc-50 dark:bg-black/40 border border-zinc-200 dark:border-zinc-800 space-y-3">
+          <label className="block text-[0.65rem] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+            CREATE NEW GROUP
           </label>
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              placeholder="Group name (e.g. Infrastructure, DevTools)"
+              placeholder="GROUP NAME (E.G. DEVTOOLS)"
               value={newGroupName}
               onChange={(e) => setNewGroupName(e.target.value)}
-              className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder-zinc-400 text-xs font-mono uppercase outline-none focus:border-blue-500"
               required
             />
             <button
               type="submit"
               disabled={loading || !newGroupName.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase transition-colors flex items-center justify-center gap-1 disabled:opacity-50 shrink-0"
             >
               <Plus className="w-4 h-4" />
-              Add Group
+              ADD GROUP
             </button>
           </div>
 
           {/* Color Picker presets */}
           <div className="flex items-center gap-2 pt-1">
-            <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-              <Palette className="w-3.5 h-3.5" /> Color:
+            <span className="text-[0.65rem] text-zinc-500 uppercase flex items-center gap-1 font-bold">
+              <Palette className="w-3.5 h-3.5" /> COLOR:
             </span>
             <div className="flex flex-wrap gap-1.5">
               {PRESET_COLORS.map((c) => (
@@ -147,7 +147,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
                   key={c.hex}
                   type="button"
                   onClick={() => setSelectedColor(c.hex)}
-                  className={`w-5 h-5 rounded-full transition-transform ${selectedColor === c.hex ? 'ring-2 ring-offset-2 ring-blue-500 scale-110 dark:ring-offset-gray-800' : 'hover:scale-105'}`}
+                  className={`w-4 h-4 ${selectedColor === c.hex ? 'ring-2 ring-blue-500 border border-white' : ''}`}
                   style={{ backgroundColor: c.hex }}
                   title={c.name}
                 />
@@ -158,36 +158,36 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
 
         {/* Existing Groups List */}
         <div className="space-y-3">
-          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            Existing Groups ({groups.length})
+          <h4 className="text-[0.65rem] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+            EXISTING GROUPS ({groups.length})
           </h4>
 
           {groups.length === 0 ? (
-            <div className="text-center py-6 text-gray-500 dark:text-gray-400 text-sm bg-gray-50/50 dark:bg-gray-800/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-              No custom groups created yet. Create one above to organize your repositories.
+            <div className="text-center py-6 text-zinc-500 dark:text-zinc-400 text-xs bg-zinc-50/50 dark:bg-zinc-900/30 border border-dashed border-zinc-200 dark:border-zinc-800 uppercase">
+              NO CUSTOM GROUPS CREATED YET.
             </div>
           ) : (
-            <div className="divide-y divide-gray-100 dark:divide-gray-700/60 max-h-60 overflow-y-auto pr-1">
+            <div className="divide-y divide-zinc-200 dark:divide-zinc-800 max-h-60 overflow-y-auto pr-1">
               {groups.map((group) => {
                 const isEditing = editingId === group.id;
 
                 if (isEditing) {
                   return (
-                    <div key={group.id} className="py-3 flex flex-col sm:flex-row gap-2 items-center">
+                    <div key={group.id} className="py-2.5 flex flex-col sm:flex-row gap-2 items-center">
                       <input
                         type="text"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
+                        className="flex-1 px-3 py-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-xs font-mono uppercase text-zinc-900 dark:text-white"
                         autoFocus
                       />
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
                         {PRESET_COLORS.map((c) => (
                           <button
                             key={c.hex}
                             type="button"
                             onClick={() => setEditColor(c.hex)}
-                            className={`w-4 h-4 rounded-full ${editColor === c.hex ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-900' : ''}`}
+                            className={`w-3.5 h-3.5 ${editColor === c.hex ? 'ring-2 ring-blue-500' : ''}`}
                             style={{ backgroundColor: c.hex }}
                           />
                         ))}
@@ -195,14 +195,14 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => handleUpdateGroup(group.id)}
-                          className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-md"
+                          className="p-1 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
                           title="Save"
                         >
                           <Check className="w-4 h-4" />
                         </button>
                         <button
                           onClick={cancelEditing}
-                          className="p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                          className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800"
                           title="Cancel"
                         >
                           <X className="w-4 h-4" />
@@ -213,34 +213,34 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
                 }
 
                 return (
-                  <div key={group.id} className="py-3 flex items-center justify-between gap-3 group">
-                    <div className="flex items-center gap-2.5">
+                  <div key={group.id} className="py-2.5 flex items-center justify-between gap-3 group">
+                    <div className="flex items-center gap-2">
                       <span
-                        className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
+                        className="w-3 h-3 shrink-0"
                         style={{ backgroundColor: group.color || '#3B82F6' }}
                       />
-                      <span className="font-medium text-gray-900 dark:text-white text-sm">
+                      <span className="font-syne font-bold text-zinc-900 dark:text-white uppercase text-sm">
                         {group.name}
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                        {group.repo_count || 0} {group.repo_count === 1 ? 'repo' : 'repos'}
+                      <span className="text-[0.6rem] px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold uppercase">
+                        {group.repo_count || 0} REPOS
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => startEditing(group)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                        className="p-1 text-zinc-400 hover:text-blue-500 transition-colors"
                         title="Edit Group"
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDeleteGroup(group.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                        className="p-1 text-zinc-400 hover:text-red-500 transition-colors"
                         title="Delete Group"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>

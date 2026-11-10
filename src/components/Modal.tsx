@@ -32,21 +32,21 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-opacity">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-opacity font-mono">
       <div
         ref={modalRef}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform transition-all border border-gray-200 dark:border-gray-700"
+        className="bg-white dark:bg-[#18181b] shadow-2xl w-full max-w-lg overflow-hidden border border-zinc-300 dark:border-zinc-800"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 id="modal-title" className="text-lg font-semibold text-gray-900 dark:text-white">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60">
+          <h3 id="modal-title" className="font-syne text-lg font-bold uppercase tracking-tight text-zinc-900 dark:text-white">
             {title}
           </h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg p-1"
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
