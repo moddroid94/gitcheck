@@ -12,6 +12,7 @@ export interface Repo {
   repo: string;
   source_type?: 'github' | 'aur';
   last_tag: string;
+  last_notified_tag?: string | null;
   installed_version?: string;
   description?: string;
   language?: string;
@@ -30,6 +31,17 @@ export interface Repo {
   latest_release_html_url?: string;
   latest_release_published_at?: string;
   latest_release_name?: string;
+}
+
+export interface NotificationLog {
+  id: number;
+  repo_id: number | null;
+  repo_name: string;
+  tag_name: string;
+  channel: string;
+  status: 'delivered' | 'failed' | 'skipped';
+  message: string;
+  created_at: string;
 }
 
 export interface Release {

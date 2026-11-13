@@ -48,6 +48,17 @@ db.exec(`
     value TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS notification_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id INTEGER,
+    repo_name TEXT NOT NULL,
+    tag_name TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    status TEXT NOT NULL,
+    message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Attempt to add new columns to existing table if they don't exist
@@ -74,12 +85,13 @@ addColumn('monitored_repos', 'check_interval', 'INTEGER DEFAULT 60');
 addColumn('monitored_repos', 'updated_at', "DATETIME DEFAULT '1970-01-01 00:00:00'");
 addColumn('monitored_repos', 'include_prereleases', 'BOOLEAN DEFAULT 0');
 addColumn('monitored_repos', 'installed_version', 'TEXT');
+addColumn('monitored_repos', 'last_notified_tag', 'TEXT');
 addColumn('monitored_repos', 'group_id', 'INTEGER');
 addColumn('monitored_repos', 'notifications_enabled', 'BOOLEAN DEFAULT 1');
 addColumn('releases', 'prerelease', 'BOOLEAN DEFAULT 0');
 
-import { Group, Repo, Release, SystemSettings, DEFAULT_SYSTEM_SETTINGS } from './types';
-export type { Group, Repo, Release, SystemSettings };
+import { Group, Repo, Release, SystemSettings, NotificationLog, DEFAULT_SYSTEM_SETTINGS } from './types';
+export type { Group, Repo, Release, SystemSettings, NotificationLog };
 export { DEFAULT_SYSTEM_SETTINGS };
 
 // Group Queries
@@ -151,8 +163,8 @@ export const getRepo = (id: number): Repo | undefined => {
 export const addRepo = (owner: string, repo: string, details: Partial<Repo> = {}) => {
   try {
     const stmt = db.prepare(`
-      INSERT INTO monitored_repos (owner, repo, source_type, description, language, stargazers_count, popularity, avatar_url, updated_at, include_prereleases, installed_version, last_tag, check_interval, group_id, notifications_enabled)
-      VALUES (@owner, @repo, @source_type, @description, @language, @stargazers_count, @popularity, @avatar_url, CURRENT_TIMESTAMP, @include_prereleases, @installed_version, @last_tag, @check_interval, @group_id, @notifications_enabled)
+      INSERT INTO monitored_repos (owner, repo, source_type, description, language, stargazers_count, popularity, avatar_url, updated_at, include_prereleases, installed_version, last_tag, last_notified_tag, check_interval, group_id, notifications_enabled)
+      VALUES (@owner, @repo, @source_type, @description, @language, @stargazers_count, @popularity, @avatar_url, CURRENT_TIMESTAMP, @include_prereleases, @installed_version, @last_tag, @last_notified_tag, @check_interval, @group_id, @notifications_enabled)
     `);
     return stmt.run({ 
       owner, 
@@ -166,6 +178,7 @@ export const addRepo = (owner: string, repo: string, details: Partial<Repo> = {}
       include_prereleases: 0,
       installed_version: null,
       last_tag: null,
+      last_notified_tag: null,
       check_interval: 60,
       group_id: null,
       notifications_enabled: 1,
@@ -195,6 +208,10 @@ export const updateLastTag = (id: number, tag: string) => {
   return db.prepare('UPDATE monitored_repos SET last_tag = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(tag, id);
 };
 
+export const updateLastNotifiedTag = (id: number, tag: string | null) => {
+  return db.prepare('UPDATE monitored_repos SET last_notified_tag = ? WHERE id = ?').run(tag, id);
+};
+
 export const touchRepo = (id: number) => {
   return db.prepare('UPDATE monitored_repos SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
 };
@@ -209,6 +226,34 @@ export const addRelease = (release: Partial<Release>) => {
 
 export const getReleases = (repoId: number): Release[] => {
   return db.prepare('SELECT * FROM releases WHERE repo_id = ? ORDER BY published_at DESC').all(repoId) as Release[];
+};
+
+export const addNotificationLog = (entry: {
+  repo_id?: number | null;
+  repo_name: string;
+  tag_name: string;
+  channel: string;
+  status: 'delivered' | 'failed' | 'skipped';
+  message?: string;
+}) => {
+  const stmt = db.prepare(`
+    INSERT INTO notification_logs (repo_id, repo_name, tag_name, channel, status, message)
+    VALUES (@repo_id, @repo_name, @tag_name, @channel, @status, @message)
+  `);
+  return stmt.run({
+    repo_id: entry.repo_id ?? null,
+    repo_name: entry.repo_name,
+    tag_name: entry.tag_name,
+    channel: entry.channel,
+    status: entry.status,
+    message: entry.message ?? '',
+  });
+};
+
+export const getNotificationLogs = (limit = 30): NotificationLog[] => {
+  return db
+    .prepare('SELECT * FROM notification_logs ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(limit) as NotificationLog[];
 };
 
 

@@ -19,9 +19,11 @@ import {
   Menu,
   X,
   Radio,
+  CheckCircle2,
+  Bell,
 } from 'lucide-react';
 import { AddRepoForm } from './AddRepoForm';
-import { RepoCard } from './RepoCard';
+import { RepoCard, RefreshFeedback } from './RepoCard';
 import { RepoRow } from './RepoRow';
 import { RepoDetails } from './RepoDetails';
 import { GroupManagerModal } from './GroupManagerModal';
@@ -59,6 +61,12 @@ export const RepoList: React.FC = () => {
   const [addModalTab, setAddModalTab] = useState<'single' | 'bulk'>('single');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [notifNotice, setNotifNotice] = useState<{
+    type: 'success' | 'warning' | 'error';
+    text: string;
+    showSettingsLink?: boolean;
+  } | null>(null);
 
   const fetchGroups = async () => {
     try {
@@ -99,6 +107,63 @@ export const RepoList: React.FC = () => {
 
   const loadData = async (silent = false) => {
     await Promise.all([fetchRepos(silent), fetchGroups()]);
+  };
+
+  const processNotificationFeedback = (entries: Array<{ repo?: string; results: any[] }>) => {
+    const flat = entries.flatMap((entry) =>
+      (entry.results || []).map((r) => ({ repo: entry.repo, ...r }))
+    );
+    if (flat.length === 0) return;
+
+    const delivered = flat.filter((r) => r.success);
+    const failed = flat.filter((r) => !r.success && !r.skipped);
+    const skipped = flat.filter((r) => r.skipped);
+
+    if (failed.length > 0) {
+      setNotifNotice({
+        type: 'error',
+        text: `NOTIFICATION FAILED (${failed[0].name}): ${failed[0].error || 'Check configuration'}`,
+        showSettingsLink: true,
+      });
+    } else if (delivered.length > 0) {
+      const channels = Array.from(new Set(delivered.map((d) => d.name))).join(', ');
+      setNotifNotice({
+        type: 'success',
+        text: `ALERT DISPATCHED VIA ${channels.toUpperCase()} FOR ${delivered.length} ${delivered.length === 1 ? 'UPDATE' : 'UPDATES'}.`,
+      });
+    } else if (skipped.length > 0) {
+      setNotifNotice({
+        type: 'warning',
+        text: `UPDATE DETECTED — NOTIFICATION SKIPPED: ${skipped[0].error || 'Channel disabled'}`,
+        showSettingsLink: true,
+      });
+    }
+  };
+
+  const handleRepoUpdated = async (feedback?: RefreshFeedback) => {
+    if (feedback?.error) {
+      setError(feedback.error);
+    } else if (feedback?.notifications && feedback.notifications.length > 0) {
+      processNotificationFeedback([{ repo: feedback.repo, results: feedback.notifications }]);
+    }
+    await loadData(true);
+  };
+
+  const handleRefreshAll = async () => {
+    setRefreshingAll(true);
+    setError('');
+    setNotifNotice(null);
+    try {
+      const res = await axios.post('/api/repos/refresh-all');
+      if (Array.isArray(res.data?.notifications) && res.data.notifications.length > 0) {
+        processNotificationFeedback(res.data.notifications);
+      }
+      await loadData(true);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to check repositories for updates');
+    } finally {
+      setRefreshingAll(false);
+    }
   };
 
   const confirmDelete = async () => {
@@ -498,11 +563,12 @@ export const RepoList: React.FC = () => {
             </button>
 
             <button
-              onClick={() => loadData()}
-              className="p-2.5 bg-white dark:bg-[#18181b] border border-zinc-300 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              title="Refresh All"
+              onClick={handleRefreshAll}
+              disabled={refreshingAll}
+              className="p-2.5 bg-white dark:bg-[#18181b] border border-zinc-300 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
+              title="Check All Repositories for Updates"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className={`w-4 h-4 ${refreshingAll ? 'animate-spin text-blue-500' : ''}`} />
             </button>
 
             <button
@@ -580,6 +646,47 @@ export const RepoList: React.FC = () => {
           </div>
         )}
 
+        {/* Notification Dispatch Banner */}
+        {notifNotice && (
+          <div
+            className={`px-4 py-3 text-xs font-mono mb-6 flex items-center justify-between gap-3 border uppercase tracking-wide ${
+              notifNotice.type === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300'
+                : notifNotice.type === 'warning'
+                ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300'
+                : 'bg-red-500/10 border-red-500/50 text-red-600 dark:text-red-400'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {notifNotice.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+              ) : notifNotice.type === 'warning' ? (
+                <Bell className="w-4 h-4 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+              )}
+              <span>{notifNotice.text}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {notifNotice.showSettingsLink && (
+                <button
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="px-2.5 py-1 border border-current text-[0.65rem] font-bold hover:opacity-80 transition-opacity"
+                >
+                  OPEN SETTINGS
+                </button>
+              )}
+              <button
+                onClick={() => setNotifNotice(null)}
+                className="p-1 hover:opacity-70"
+                aria-label="Dismiss notification banner"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Error Alert */}
         {error && (
           <div
@@ -637,7 +744,7 @@ export const RepoList: React.FC = () => {
                     repo={repo}
                     onDelete={(id) => setRepoToDelete(id)}
                     onSelect={setSelectedRepo}
-                    onUpdate={() => loadData(true)}
+                    onUpdate={handleRepoUpdated}
                   />
                 ))}
               </div>
@@ -662,7 +769,7 @@ export const RepoList: React.FC = () => {
                           repo={repo}
                           onDelete={(id) => setRepoToDelete(id)}
                           onSelect={setSelectedRepo}
-                          onUpdate={() => loadData(true)}
+                          onUpdate={handleRepoUpdated}
                         />
                       ))}
                     </tbody>
@@ -704,7 +811,7 @@ export const RepoList: React.FC = () => {
                               repo={repo}
                               onDelete={(id) => setRepoToDelete(id)}
                               onSelect={setSelectedRepo}
-                              onUpdate={() => loadData(true)}
+                              onUpdate={handleRepoUpdated}
                             />
                           ))}
                         </div>
@@ -736,7 +843,7 @@ export const RepoList: React.FC = () => {
                               repo={repo}
                               onDelete={(id) => setRepoToDelete(id)}
                               onSelect={setSelectedRepo}
-                              onUpdate={() => loadData(true)}
+                              onUpdate={handleRepoUpdated}
                             />
                           ))}
                         </div>

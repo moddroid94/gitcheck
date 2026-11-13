@@ -15,8 +15,10 @@ import {
   ArrowLeft,
   Sparkles,
   Folder,
+  RefreshCw,
+  Clock,
 } from 'lucide-react';
-import { Group, SystemSettings, DEFAULT_SYSTEM_SETTINGS } from '../types';
+import { Group, SystemSettings, NotificationLog, DEFAULT_SYSTEM_SETTINGS } from '../types';
 
 interface SettingsPageProps {
   onBack: () => void;
@@ -41,8 +43,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
   // Password visibility toggle
   const [showTelegramToken, setShowTelegramToken] = useState(false);
 
+  // Dispatch logs
+  const [logs, setLogs] = useState<NotificationLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
   useEffect(() => {
     fetchSettings();
+    fetchLogs();
   }, []);
 
   const fetchSettings = async () => {
@@ -54,6 +61,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
       setError(err.response?.data?.error || 'Failed to load system settings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const response = await axios.get('/api/notifications/logs?limit=25');
+      if (Array.isArray(response.data)) {
+        setLogs(response.data);
+      }
+    } catch (err) {
+      console.error('Failed to load notification logs', err);
+    } finally {
+      setLoadingLogs(false);
     }
   };
 
@@ -92,9 +113,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
         },
       });
 
+      // Automatically enable and persist working Telegram credentials so real update alerts fire immediately
+      const nextSettings: SystemSettings = {
+        ...settings,
+        telegram_enabled: true,
+      };
+      setSettings(nextSettings);
+      await axios.put('/api/settings', {
+        telegram_enabled: true,
+        telegram_bot_token: nextSettings.telegram_bot_token,
+        telegram_chat_id: nextSettings.telegram_chat_id,
+        telegram_template: nextSettings.telegram_template,
+      });
+
       setTelegramTestResult({
         success: true,
-        message: response.data.message || 'Telegram test message sent successfully!',
+        message: `${response.data.message || 'Telegram test message sent!'} — Channel enabled & saved.`,
       });
     } catch (err: any) {
       setTelegramTestResult({
@@ -122,9 +156,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
         },
       });
 
+      // Automatically enable and persist working Webhook configuration so real update alerts fire immediately
+      const nextSettings: SystemSettings = {
+        ...settings,
+        webhook_enabled: true,
+      };
+      setSettings(nextSettings);
+      await axios.put('/api/settings', {
+        webhook_enabled: true,
+        webhook_url: nextSettings.webhook_url,
+        webhook_headers: nextSettings.webhook_headers,
+        webhook_payload_type: nextSettings.webhook_payload_type,
+        webhook_template: nextSettings.webhook_template,
+      });
+
       setWebhookTestResult({
         success: true,
-        message: response.data.message || 'Webhook delivered successfully!',
+        message: `${response.data.message || 'Webhook delivered!'} — Channel enabled & saved.`,
       });
     } catch (err: any) {
       setWebhookTestResult({
@@ -373,20 +421,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
                     </div>
                   </div>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-xs uppercase font-bold">
-                    <input
-                      type="checkbox"
-                      checked={settings.telegram_enabled}
-                      onChange={(e) =>
-                        setSettings({ ...settings, telegram_enabled: e.target.checked })
-                      }
-                      className="w-4 h-4 text-blue-600 rounded-none border-zinc-300"
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, telegram_enabled: !settings.telegram_enabled })}
+                    className={`flex items-center gap-2 px-3 py-1.5 border text-xs uppercase font-bold transition-colors ${
+                      settings.telegram_enabled
+                        ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-zinc-200/70 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 ${settings.telegram_enabled ? 'bg-emerald-500' : 'bg-zinc-400'}`}
                     />
                     <span>{settings.telegram_enabled ? 'ENABLED' : 'DISABLED'}</span>
-                  </label>
+                  </button>
                 </div>
 
                 <div className="p-5 space-y-4">
+                  {!settings.telegram_enabled && (settings.telegram_bot_token || settings.telegram_chat_id) && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-300 text-xs font-bold uppercase flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>TELEGRAM CHANNEL IS DISABLED. CHECK &quot;ENABLED&quot; ABOVE AND SAVE SETTINGS TO TRIGGER AUTOMATIC ALERTS.</span>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[0.65rem] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1">
@@ -491,20 +548,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
                     </div>
                   </div>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-xs uppercase font-bold">
-                    <input
-                      type="checkbox"
-                      checked={settings.webhook_enabled}
-                      onChange={(e) =>
-                        setSettings({ ...settings, webhook_enabled: e.target.checked })
-                      }
-                      className="w-4 h-4 text-blue-600 rounded-none border-zinc-300"
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, webhook_enabled: !settings.webhook_enabled })}
+                    className={`flex items-center gap-2 px-3 py-1.5 border text-xs uppercase font-bold transition-colors ${
+                      settings.webhook_enabled
+                        ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-zinc-200/70 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 ${settings.webhook_enabled ? 'bg-emerald-500' : 'bg-zinc-400'}`}
                     />
                     <span>{settings.webhook_enabled ? 'ENABLED' : 'DISABLED'}</span>
-                  </label>
+                  </button>
                 </div>
 
                 <div className="p-5 space-y-4">
+                  {!settings.webhook_enabled && settings.webhook_url && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-300 text-xs font-bold uppercase flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>WEBHOOK CHANNEL IS DISABLED. CHECK &quot;ENABLED&quot; ABOVE AND SAVE SETTINGS TO TRIGGER AUTOMATIC ALERTS.</span>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="md:col-span-2">
                       <label className="block text-[0.65rem] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1">
@@ -604,6 +670,91 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* MODULE 3: NOTIFICATION DISPATCH LOGS */}
+              <div className="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800">
+                <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-900/60">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border border-zinc-500/30">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-syne font-bold uppercase text-zinc-900 dark:text-white text-base">
+                        RECENT NOTIFICATION DISPATCH LOGS
+                      </h3>
+                      <p className="text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase">
+                        AUDIT TRAIL OF DELIVERED, FAILED, AND SKIPPED UPDATE ALERTS.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchLogs}
+                    disabled={loadingLogs}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold uppercase transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin' : ''}`} />
+                    <span>REFRESH LOGS</span>
+                  </button>
+                </div>
+
+                <div className="p-5">
+                  {logs.length === 0 ? (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase py-4 text-center">
+                      NO NOTIFICATION DISPATCHES RECORDED YET.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase">
+                            <th className="py-2 pr-3">STATUS</th>
+                            <th className="py-2 pr-3">REPOSITORY</th>
+                            <th className="py-2 pr-3">VERSION</th>
+                            <th className="py-2 pr-3">CHANNEL</th>
+                            <th className="py-2 pr-3">DETAILS</th>
+                            <th className="py-2 text-right">TIME (UTC)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                          {logs.map((log) => (
+                            <tr key={log.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
+                              <td className="py-2.5 pr-3 whitespace-nowrap">
+                                <span
+                                  className={`px-1.5 py-0.5 text-[0.6rem] font-bold uppercase border ${
+                                    log.status === 'delivered'
+                                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
+                                      : log.status === 'failed'
+                                      ? 'bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/40'
+                                      : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/40'
+                                  }`}
+                                >
+                                  {log.status}
+                                </span>
+                              </td>
+                              <td className="py-2.5 pr-3 font-bold text-zinc-900 dark:text-white whitespace-nowrap">
+                                {log.repo_name}
+                              </td>
+                              <td className="py-2.5 pr-3 font-mono text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                                {log.tag_name}
+                              </td>
+                              <td className="py-2.5 pr-3 uppercase text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
+                                {log.channel}
+                              </td>
+                              <td className="py-2.5 pr-3 text-zinc-600 dark:text-zinc-400 max-w-md break-words">
+                                {log.message}
+                              </td>
+                              <td className="py-2.5 text-right text-[0.65rem] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                                {log.created_at}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

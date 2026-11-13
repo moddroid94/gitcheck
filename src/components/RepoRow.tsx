@@ -17,11 +17,13 @@ import axios from 'axios';
 import { Repo } from '../types';
 import { ReleaseModal } from './ReleaseModal';
 
+import { RefreshFeedback } from './RepoCard';
+
 interface RepoRowProps {
   repo: Repo;
   onDelete: (id: number) => void;
   onSelect: (repo: Repo) => void;
-  onUpdate: () => void;
+  onUpdate: (feedback?: RefreshFeedback) => void;
 }
 
 export const RepoRow: React.FC<RepoRowProps> = ({ repo, onDelete, onSelect, onUpdate }) => {
@@ -36,16 +38,19 @@ export const RepoRow: React.FC<RepoRowProps> = ({ repo, onDelete, onSelect, onUp
     e.stopPropagation();
     setRefreshing(true);
     try {
-      await axios.post(`/api/repos/${repo.id}/refresh`);
-      onUpdate();
+      const res = await axios.post(`/api/repos/${repo.id}/refresh`);
+      onUpdate({
+        repo: repo.repo,
+        updated: !!res.data?._updated,
+        notifications: res.data?._notifications || [],
+      });
     } catch (error: any) {
       console.error('Failed to refresh repo', error);
       const errorMessage = error.response?.data?.error || error.message;
-      if (error.response?.status === 403) {
-        alert(`Rate Limit Exceeded: ${errorMessage}`);
-      } else {
-        alert(`Failed to refresh: ${errorMessage}`);
-      }
+      onUpdate({
+        repo: repo.repo,
+        error: error.response?.status === 403 ? `Rate Limit Exceeded: ${errorMessage}` : `Failed to refresh: ${errorMessage}`,
+      });
     } finally {
       setRefreshing(false);
     }

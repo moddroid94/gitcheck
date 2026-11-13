@@ -33,6 +33,11 @@ export function renderTemplate(template: string, data: Record<string, any>): str
   });
 }
 
+// Escape special characters for Telegram legacy Markdown parse_mode (_, *, `, [)
+export function escapeTelegramMarkdown(value: string): string {
+  return value.replace(/([_*`\[])/g, '\\$1');
+}
+
 /**
  * Telegram Notification Provider
  * Uses Telegram Bot API: https://api.telegram.org/bot<token>/sendMessage
@@ -43,7 +48,8 @@ export class TelegramNotificationProvider implements NotificationProvider {
   readonly description = 'Send release notifications to a Telegram chat, channel, or group';
 
   isEnabled(settings: any): boolean {
-    return !!(settings.telegram_enabled && settings.telegram_bot_token && settings.telegram_chat_id);
+    const enabled = settings.telegram_enabled === true || settings.telegram_enabled === 'true';
+    return !!(enabled && settings.telegram_bot_token?.trim() && settings.telegram_chat_id?.trim());
   }
 
   async send(payload: NotificationPayload, settings: any): Promise<NotificationResult> {
@@ -60,30 +66,61 @@ export class TelegramNotificationProvider implements NotificationProvider {
     }
 
     const { repo, release } = payload;
-    const template = settings.telegram_template || '🚀 *New Release Detected!*\n\n*Repo:* {{repo}}\n*Version:* `{{version}}`\n*URL:* {{html_url}}';
+    const template =
+      settings.telegram_template ||
+      '🚀 *New Release Detected!*\n\n*Repo:* {{repo}}\n*Version:* `{{version}}`\n*URL:* {{html_url}}';
 
-    const plainBody = (release.body || '').replace(/[\r\n]+/g, ' ').substring(0, 400);
+    const rawBody = (release.body || '').replace(/[\r\n]+/g, ' ').trim();
+    const truncatedBody = rawBody.substring(0, 400) + (rawBody.length > 400 ? '...' : '');
+    const rawVersion = release.tag_name || repo.last_tag || 'latest';
+    const rawPublishedAt = release.published_at
+      ? new Date(release.published_at).toLocaleString()
+      : new Date().toLocaleString();
+    const rawHtmlUrl =
+      release.html_url ||
+      (repo.source_type === 'aur'
+        ? `https://aur.archlinux.org/packages/${repo.repo}`
+        : `https://github.com/${repo.owner}/${repo.repo}`);
+    const rawSourceType = repo.source_type === 'aur' ? 'AUR Package' : 'GitHub Repository';
+    const rawName = release.name || release.tag_name || repo.repo;
 
-    const context: Record<string, string> = {
+    // Plain context (for plain-text fallback without parse_mode)
+    const plainContext: Record<string, string> = {
       repo: repo.repo,
       owner: repo.owner,
-      version: release.tag_name || repo.last_tag || 'latest',
-      name: release.name || release.tag_name || repo.repo,
-      published_at: release.published_at ? new Date(release.published_at).toLocaleString() : new Date().toLocaleString(),
-      html_url: release.html_url || (repo.source_type === 'aur' ? `https://aur.archlinux.org/packages/${repo.repo}` : `https://github.com/${repo.owner}/${repo.repo}`),
-      source_type: repo.source_type === 'aur' ? 'AUR Package' : 'GitHub Repository',
-      body: plainBody + (release.body && release.body.length > 400 ? '...' : ''),
+      version: rawVersion,
+      name: rawName,
+      published_at: rawPublishedAt,
+      html_url: rawHtmlUrl,
+      source_type: rawSourceType,
+      body: truncatedBody,
     };
 
-    const text = renderTemplate(template, context);
+    // Check if {{version}} is already wrapped in backticks in the template
+    const versionInCodeSpan = /`[^`]*\{\{\s*version\s*\}\}[^`]*`/.test(template);
+
+    // Markdown-safe context: escape special Markdown chars in dynamic values so entity parsing never fails
+    const markdownContext: Record<string, string> = {
+      repo: escapeTelegramMarkdown(repo.repo),
+      owner: escapeTelegramMarkdown(repo.owner),
+      version: versionInCodeSpan ? rawVersion.replace(/`/g, "'") : escapeTelegramMarkdown(rawVersion),
+      name: escapeTelegramMarkdown(rawName),
+      published_at: escapeTelegramMarkdown(rawPublishedAt),
+      html_url: rawHtmlUrl.replace(/\)/g, '%29'),
+      source_type: escapeTelegramMarkdown(rawSourceType),
+      body: escapeTelegramMarkdown(truncatedBody),
+    };
+
+    const markdownText = renderTemplate(template, markdownContext).slice(0, 4096);
+    const plainText = renderTemplate(template, plainContext).slice(0, 4096);
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
 
     try {
-      const url = `https://api.telegram.org/bot${token}/sendMessage`;
       const response = await axios.post(
         url,
         {
           chat_id: chatId,
-          text: text,
+          text: markdownText,
           parse_mode: 'Markdown',
           disable_web_page_preview: false,
         },
@@ -106,7 +143,50 @@ export class TelegramNotificationProvider implements NotificationProvider {
         };
       }
     } catch (err: any) {
-      const errorMsg = err.response?.data?.description || err.message || 'Failed to send Telegram message';
+      const status = err.response?.status;
+      const description = err.response?.data?.description || '';
+      const lowerDesc = description.toLowerCase();
+      const isUnrecoverableChatError =
+        lowerDesc.includes('chat not found') ||
+        lowerDesc.includes('chat_id') ||
+        lowerDesc.includes('blocked') ||
+        lowerDesc.includes('deactivated') ||
+        lowerDesc.includes('kicked') ||
+        lowerDesc.includes('not a member');
+
+      // If Telegram rejected Markdown entity parsing (or any other formatting 400), retry as plain text
+      if (status === 400 && !isUnrecoverableChatError) {
+        try {
+          const fallbackResponse = await axios.post(
+            url,
+            {
+              chat_id: chatId,
+              text: plainText,
+              disable_web_page_preview: false,
+            },
+            { timeout: 10000 }
+          );
+
+          if (fallbackResponse.data && fallbackResponse.data.ok) {
+            return {
+              channelId: this.id,
+              name: this.name,
+              success: true,
+              message: 'Telegram notification sent successfully (plain text fallback).',
+            };
+          }
+        } catch (fallbackErr: any) {
+          const fallbackMsg = fallbackErr.response?.data?.description || fallbackErr.message || 'Failed to send Telegram message';
+          return {
+            channelId: this.id,
+            name: this.name,
+            success: false,
+            error: fallbackMsg,
+          };
+        }
+      }
+
+      const errorMsg = description || err.message || 'Failed to send Telegram message';
       return {
         channelId: this.id,
         name: this.name,
@@ -155,7 +235,8 @@ export class WebhookNotificationProvider implements NotificationProvider {
   readonly description = 'Send HTTP POST requests with custom payloads to Discord, Slack, n8n, Zapier, or custom services';
 
   isEnabled(settings: any): boolean {
-    return !!(settings.webhook_enabled && settings.webhook_url);
+    const enabled = settings.webhook_enabled === true || settings.webhook_enabled === 'true';
+    return !!(enabled && settings.webhook_url?.trim());
   }
 
   async send(payload: NotificationPayload, settings: any): Promise<NotificationResult> {
@@ -178,9 +259,10 @@ export class WebhookNotificationProvider implements NotificationProvider {
 
     if (settings.webhook_headers) {
       try {
-        const parsed = typeof settings.webhook_headers === 'string'
-          ? JSON.parse(settings.webhook_headers)
-          : settings.webhook_headers;
+        const parsed =
+          typeof settings.webhook_headers === 'string'
+            ? JSON.parse(settings.webhook_headers)
+            : settings.webhook_headers;
         headers = { ...headers, ...parsed };
       } catch (e) {
         // If invalid JSON, ignore or fallback
@@ -193,7 +275,11 @@ export class WebhookNotificationProvider implements NotificationProvider {
       version: release.tag_name || repo.last_tag || 'latest',
       name: release.name || release.tag_name || repo.repo,
       source_type: repo.source_type || 'github',
-      html_url: release.html_url || (repo.source_type === 'aur' ? `https://aur.archlinux.org/packages/${repo.repo}` : `https://github.com/${repo.owner}/${repo.repo}`),
+      html_url:
+        release.html_url ||
+        (repo.source_type === 'aur'
+          ? `https://aur.archlinux.org/packages/${repo.repo}`
+          : `https://github.com/${repo.owner}/${repo.repo}`),
       body: release.body || '',
       json_body: JSON.stringify(release.body || ''),
       published_at: release.published_at || new Date().toISOString(),
