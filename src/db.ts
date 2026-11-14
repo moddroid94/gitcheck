@@ -79,7 +79,7 @@ addColumn('monitored_repos', 'source_type', "TEXT DEFAULT 'github'");
 addColumn('monitored_repos', 'description', 'TEXT');
 addColumn('monitored_repos', 'language', 'TEXT');
 addColumn('monitored_repos', 'stargazers_count', 'INTEGER');
-addColumn('monitored_repos', 'popularity', 'REAL');
+addColumn('monitored_repos', 'pull_count', 'INTEGER');
 addColumn('monitored_repos', 'avatar_url', 'TEXT');
 addColumn('monitored_repos', 'check_interval', 'INTEGER DEFAULT 60');
 addColumn('monitored_repos', 'updated_at', "DATETIME DEFAULT '1970-01-01 00:00:00'");
@@ -163,8 +163,8 @@ export const getRepo = (id: number): Repo | undefined => {
 export const addRepo = (owner: string, repo: string, details: Partial<Repo> = {}) => {
   try {
     const stmt = db.prepare(`
-      INSERT INTO monitored_repos (owner, repo, source_type, description, language, stargazers_count, popularity, avatar_url, updated_at, include_prereleases, installed_version, last_tag, last_notified_tag, check_interval, group_id, notifications_enabled)
-      VALUES (@owner, @repo, @source_type, @description, @language, @stargazers_count, @popularity, @avatar_url, CURRENT_TIMESTAMP, @include_prereleases, @installed_version, @last_tag, @last_notified_tag, @check_interval, @group_id, @notifications_enabled)
+      INSERT INTO monitored_repos (owner, repo, source_type, description, language, stargazers_count, pull_count, avatar_url, updated_at, include_prereleases, installed_version, last_tag, last_notified_tag, check_interval, group_id, notifications_enabled)
+      VALUES (@owner, @repo, @source_type, @description, @language, @stargazers_count, @pull_count, @avatar_url, CURRENT_TIMESTAMP, @include_prereleases, @installed_version, @last_tag, @last_notified_tag, @check_interval, @group_id, @notifications_enabled)
     `);
     return stmt.run({ 
       owner, 
@@ -173,7 +173,7 @@ export const addRepo = (owner: string, repo: string, details: Partial<Repo> = {}
       description: null, 
       language: null, 
       stargazers_count: null, 
-      popularity: null,
+      pull_count: null,
       avatar_url: null, 
       include_prereleases: 0,
       installed_version: null,

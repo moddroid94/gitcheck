@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Star, ArrowUpCircle, CheckCircle, RefreshCw, ChevronRight, FileText, User, ThumbsUp, Flame, Bell, BellOff, Settings, Trash2 } from 'lucide-react';
+import { Star, CheckCircle, RefreshCw, ChevronRight, FileText, Download, Container, Bell, BellOff, Settings, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -75,7 +75,19 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
     }
   };
 
-  const isAur = repo.source_type === 'aur';
+  const isDocker = repo.source_type === 'docker';
+  const dockerHubUrl =
+    repo.owner === 'library'
+      ? `https://hub.docker.com/_/${repo.repo}`
+      : `https://hub.docker.com/r/${repo.owner}/${repo.repo}`;
+
+  const formatPulls = (count?: number) => {
+    if (count === undefined || count === null) return '0';
+    if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+    if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+    return String(count);
+  };
 
   return (
     <>
@@ -92,12 +104,12 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <span
                 className={`px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider font-mono ${
-                  isAur
-                    ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                  isDocker
+                    ? 'bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800'
                     : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
                 }`}
               >
-                {isAur ? 'AUR' : 'GITHUB'}
+                {isDocker ? 'DOCKER' : 'GITHUB'}
               </span>
               {repo.group_name && (
                 <span
@@ -119,11 +131,7 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
 
             <h3 className="font-syne font-extrabold text-gray-900 dark:text-white text-xl tracking-tight uppercase leading-tight truncate">
               <a
-                href={
-                  isAur
-                    ? `https://aur.archlinux.org/packages/${repo.repo}`
-                    : `https://github.com/${repo.owner}/${repo.repo}`
-                }
+                href={isDocker ? dockerHubUrl : `https://github.com/${repo.owner}/${repo.repo}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -134,50 +142,46 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDelete, onSelect, on
             </h3>
 
             <div className="text-[0.7rem] text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-2 flex-wrap uppercase tracking-wider font-mono">
-              <span>{isAur ? `AUR / ${repo.owner || 'Orphaned'}` : `GITHUB / ${repo.owner}`}</span>
-              {!isAur && repo.language && (
+              <span>{isDocker ? `DOCKER HUB / ${repo.owner || 'library'}` : `GITHUB / ${repo.owner}`}</span>
+              {!isDocker && repo.language && (
                 <>
                   <span>•</span>
                   <span className="text-blue-600 dark:text-blue-400 font-semibold">{repo.language}</span>
                 </>
               )}
-              {!isAur && repo.stargazers_count !== undefined && (
+              {repo.stargazers_count !== undefined && (
                 <>
                   <span>•</span>
                   <span className="flex items-center gap-1">
-                    <Star className="w-3 h-3 text-amber-500 inline" /> {repo.stargazers_count} Stars
+                    <Star className="w-3 h-3 text-amber-500 inline" /> {repo.stargazers_count.toLocaleString()} Stars
                   </span>
                 </>
               )}
-              {isAur && repo.stargazers_count !== undefined && (
+              {isDocker && repo.pull_count !== undefined && repo.pull_count !== null && (
                 <>
                   <span>•</span>
-                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
-                    <ThumbsUp className="w-3 h-3 inline" /> {repo.stargazers_count} Votes
-                  </span>
-                </>
-              )}
-              {isAur && repo.popularity !== undefined && repo.popularity !== null && (
-                <>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
-                    <Flame className="w-3 h-3 inline" /> {repo.popularity.toFixed(2)} Pop
+                  <span className="flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold">
+                    <Download className="w-3 h-3 inline" /> {formatPulls(repo.pull_count)} Pulls
                   </span>
                 </>
               )}
             </div>
           </div>
 
-          {/* Repo Avatar */}
+          {/* Repo Avatar / Docker Container Icon */}
           {repo.avatar_url ? (
             <img
               src={repo.avatar_url}
               alt={repo.owner}
               className="w-10 h-10 border border-zinc-200 dark:border-zinc-700 object-contain p-0.5 bg-white dark:bg-zinc-800 shrink-0"
             />
+          ) : isDocker ? (
+            <div className="w-10 h-10 border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/50 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
+              <Container className="w-5 h-5" />
+            </div>
           ) : (
             <div className="w-10 h-10 border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 font-bold font-syne text-lg shrink-0">
-              {repo.owner[0]?.toUpperCase() || 'A'}
+              {repo.owner[0]?.toUpperCase() || 'G'}
             </div>
           )}
         </div>

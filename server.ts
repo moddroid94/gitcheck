@@ -1,8 +1,9 @@
 import express from 'express';
+import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { getRepos, addRepo, removeRepo, updateLastTag, updateLastNotifiedTag, updateRepo, addRelease, getReleases as getDbReleases, getRepo, touchRepo, getGroups, addGroup, updateGroup, deleteGroup, getSystemSettings, updateSystemSettings, addNotificationLog, getNotificationLogs } from './src/db';
 import { getLatestRelease, getRepoDetails, getReleases as getGithubReleases } from './src/services/github';
-import { getAurPackageInfo } from './src/services/aur';
+import { getDockerRepoDetails, getLatestDockerRelease, getDockerReleases, getDockerRepoAvatar } from './src/services/dockerhub';
 import { notificationService } from './src/services/notifications';
 import cron from 'node-cron';
 import { config } from './src/config';
@@ -13,12 +14,49 @@ const PORT = 3000;
 app.use(express.json());
 
 export interface ParsedInput {
-  sourceType: 'github' | 'aur';
+  sourceType: 'github' | 'docker';
   owner: string;
   repo: string;
 }
 
-// Helper to parse repo/package string or URL into sourceType, owner, and repo
+const parseDockerHubTarget = (raw: string): ParsedInput | null => {
+  let target = raw.trim();
+  if (!target) return null;
+
+  if (target.includes('hub.docker.com')) {
+    try {
+      const url = new URL(target.startsWith('http') ? target : `https://${target}`);
+      const parts = url.pathname.split('/').filter(Boolean);
+      if (parts[0] === '_' && parts[1]) {
+        return { sourceType: 'docker', owner: 'library', repo: parts[1] };
+      }
+      if (parts[0] === 'r' && parts[1] && parts[2]) {
+        return { sourceType: 'docker', owner: parts[1], repo: parts[2] };
+      }
+      if (parts.length >= 2 && parts[0] !== 'u') {
+        return { sourceType: 'docker', owner: parts[0], repo: parts[1] };
+      }
+    } catch (e) {}
+  }
+
+  target = target.replace(/^docker\.io\//i, '').replace(/^\/+|\/+$/g, '');
+  // Strip optional image tag like nginx:latest or org/app:v1
+  const colonIdx = target.indexOf(':');
+  if (colonIdx !== -1) {
+    target = target.substring(0, colonIdx);
+  }
+
+  const parts = target.split('/').filter(Boolean);
+  if (parts.length === 1 && /^[a-zA-Z0-9._-]+$/.test(parts[0])) {
+    return { sourceType: 'docker', owner: 'library', repo: parts[0] };
+  }
+  if (parts.length === 2 && /^[a-zA-Z0-9._-]+$/.test(parts[0]) && /^[a-zA-Z0-9._-]+$/.test(parts[1])) {
+    return { sourceType: 'docker', owner: parts[0], repo: parts[1] };
+  }
+  return null;
+};
+
+// Helper to parse repo/image string or URL into sourceType, owner, and repo
 const parseRepoString = (input: string): ParsedInput | null => {
   if (!input) return null;
   let clean = input.trim();
@@ -43,36 +81,16 @@ const parseRepoString = (input: string): ParsedInput | null => {
     return null;
   }
 
-  // 2. Explicit aur: prefix
-  if (clean.toLowerCase().startsWith('aur:')) {
-    clean = clean.substring(4).trim();
-    if (clean.includes('aur.archlinux.org')) {
-      try {
-        const url = new URL(clean.startsWith('http') ? clean : `https://${clean}`);
-        const parts = url.pathname.split('/').filter(Boolean);
-        const pkgIdx = parts.indexOf('packages');
-        if (pkgIdx !== -1 && parts.length > pkgIdx + 1) {
-          return { sourceType: 'aur', owner: 'aur', repo: parts[pkgIdx + 1] };
-        }
-      } catch (e) {}
-    }
-    const cleanPkg = clean.replace(/^\/+|\/+$/g, '');
-    if (cleanPkg) {
-      return { sourceType: 'aur', owner: 'aur', repo: cleanPkg };
-    }
-    return null;
+  // 2. Explicit docker: or dh: prefix
+  if (clean.toLowerCase().startsWith('docker:') || clean.toLowerCase().startsWith('dh:')) {
+    const stripped = clean.replace(/^(docker|dh):/i, '').trim();
+    return parseDockerHubTarget(stripped);
   }
 
-  // 3. AUR URL without prefix
-  if (clean.includes('aur.archlinux.org')) {
-    try {
-      const url = new URL(clean.startsWith('http') ? clean : `https://${clean}`);
-      const parts = url.pathname.split('/').filter(Boolean);
-      const pkgIdx = parts.indexOf('packages');
-      if (pkgIdx !== -1 && parts.length > pkgIdx + 1) {
-        return { sourceType: 'aur', owner: 'aur', repo: parts[pkgIdx + 1] };
-      }
-    } catch (e) {}
+  // 3. Docker Hub URL or docker.io reference without prefix
+  if (clean.includes('hub.docker.com') || clean.toLowerCase().startsWith('docker.io/')) {
+    const parsedDocker = parseDockerHubTarget(clean);
+    if (parsedDocker) return parsedDocker;
   }
 
   // 4. GitHub URL without prefix
@@ -92,9 +110,9 @@ const parseRepoString = (input: string): ParsedInput | null => {
     return { sourceType: 'github', owner: parts[0].trim(), repo: parts[1].trim().replace(/\.git$/, '') };
   }
 
-  // 6. Single word without slash (AUR package name)
-  if (parts.length === 1 && /^[a-zA-Z0-9_\-+.@]+$/.test(clean)) {
-    return { sourceType: 'aur', owner: 'aur', repo: clean };
+  // 6. Single word without slash -> Official Docker Hub library image (e.g. nginx, postgres, redis)
+  if (parts.length === 1 && /^[a-zA-Z0-9._-]+(:[a-zA-Z0-9._-]+)?$/.test(clean)) {
+    return parseDockerHubTarget(clean);
   }
 
   return null;
@@ -240,8 +258,8 @@ app.get('/api/repos/:id', (req, res) => {
 app.post('/api/repos', async (req, res) => {
   let { owner, repo, source_type, input_string, check_interval, include_prereleases, installed_version, group_id, notifications_enabled } = req.body;
 
-  if (input_string || (!source_type && owner && (owner.includes('/') || owner.startsWith('aur:') || owner.startsWith('gh:')))) {
-    const raw = input_string || (owner.includes('/') || owner.startsWith('aur:') || owner.startsWith('gh:') ? owner : `${owner}/${repo}`);
+  if (input_string || (!source_type && owner && (owner.includes('/') || owner.startsWith('docker:') || owner.startsWith('dh:') || owner.startsWith('gh:')))) {
+    const raw = input_string || (owner.includes('/') || owner.startsWith('docker:') || owner.startsWith('dh:') || owner.startsWith('gh:') ? owner : `${owner}/${repo}`);
     const parsed = parseRepoString(raw);
     if (parsed) {
       owner = parsed.owner;
@@ -256,7 +274,7 @@ app.post('/api/repos', async (req, res) => {
   }
 
   if (!owner || !repo) {
-    return res.status(400).json({ error: 'Owner and repo or AUR package identifier are required' });
+    return res.status(400).json({ error: 'GitHub repository or Docker Hub image identifier is required' });
   }
 
   source_type = source_type || 'github';
@@ -270,29 +288,31 @@ app.post('/api/repos', async (req, res) => {
     : (sysSettings.default_notifications_enabled ? 1 : 0);
 
   try {
-    if (source_type === 'aur') {
-      let aurInfo;
+    if (source_type === 'docker') {
+      let dockerInfo;
       try {
-        aurInfo = await getAurPackageInfo(repo);
+        dockerInfo = await getDockerRepoDetails(owner, repo);
       } catch (error: any) {
-        return res.status(404).json({ error: error.message || `AUR package '${repo}' not found` });
+        return res.status(404).json({ error: error.message || `Docker Hub image '${owner}/${repo}' not found` });
       }
 
-      const versionTag = aurInfo.Version;
-      const ownerName = aurInfo.Maintainer || 'aur';
-      const avatarUrl = 'https://upload.wikimedia.org/wikipedia/commons/a/a3/Archlinux-icon-crystal-64.svg';
+      const [latestRelease, avatarUrl] = await Promise.all([
+        getLatestDockerRelease(owner, repo, effectiveIncludePrereleases, true, dockerInfo),
+        getDockerRepoAvatar(dockerInfo.namespace || owner, dockerInfo.name || repo),
+      ]);
+      const versionTag = latestRelease ? latestRelease.tag_name : null;
       const hasInitialUpdate = Boolean(installed_version && versionTag && installed_version !== versionTag);
 
-      const result = addRepo(ownerName, aurInfo.Name, {
-        source_type: 'aur',
-        description: aurInfo.Description,
-        language: 'PKGBUILD',
-        stargazers_count: aurInfo.NumVotes,
-        popularity: aurInfo.Popularity,
+      const result = addRepo(dockerInfo.namespace || owner, dockerInfo.name || repo, {
+        source_type: 'docker',
+        description: dockerInfo.description || `Docker Hub image ${dockerInfo.namespace || owner}/${dockerInfo.name || repo}`,
+        language: 'Docker',
+        stargazers_count: dockerInfo.star_count ?? 0,
+        pull_count: dockerInfo.pull_count ?? 0,
         avatar_url: avatarUrl,
         last_tag: versionTag,
         last_notified_tag: hasInitialUpdate ? null : versionTag,
-        include_prereleases: 0,
+        include_prereleases: effectiveIncludePrereleases ? 1 : 0,
         check_interval: effectiveCheckInterval,
         installed_version: installed_version || null,
         group_id: effectiveGroupId,
@@ -301,22 +321,47 @@ app.post('/api/repos', async (req, res) => {
 
       if (result.lastInsertRowid) {
         const repoId = Number(result.lastInsertRowid);
-        const releaseRecord = {
-          repo_id: repoId,
-          tag_name: versionTag,
-          name: `AUR ${aurInfo.Name} ${versionTag}`,
-          body: `**Maintainer:** ${aurInfo.Maintainer || 'Orphaned'} | **Votes:** ${aurInfo.NumVotes} | **Popularity:** ${aurInfo.Popularity.toFixed(2)}${aurInfo.OutOfDate ? ' | ⚠️ **Out of Date**' : ''}\n\n${aurInfo.Description}\n\n[AUR Package Page](https://aur.archlinux.org/packages/${aurInfo.Name})${aurInfo.URL ? ` • [Upstream Website](${aurInfo.URL})` : ''}`,
-          published_at: aurInfo.LastModified ? new Date(aurInfo.LastModified * 1000).toISOString() : new Date().toISOString(),
-          html_url: `https://aur.archlinux.org/packages/${aurInfo.Name}`,
-        };
-        addRelease(releaseRecord);
+        const recentTags = await getDockerReleases(owner, repo, 5, dockerInfo);
+        for (const rel of recentTags) {
+          addRelease({
+            repo_id: repoId,
+            tag_name: rel.tag_name,
+            name: rel.name,
+            body: rel.body,
+            published_at: rel.published_at,
+            html_url: rel.html_url,
+            prerelease: rel.prerelease ? 1 : 0,
+          });
+        }
 
-        if (hasInitialUpdate) {
+        if (latestRelease) {
+          addRelease({
+            repo_id: repoId,
+            tag_name: latestRelease.tag_name,
+            name: latestRelease.name,
+            body: latestRelease.body,
+            published_at: latestRelease.published_at,
+            html_url: latestRelease.html_url,
+            prerelease: latestRelease.prerelease ? 1 : 0,
+          });
+        }
+
+        if (hasInitialUpdate && latestRelease && versionTag) {
           const addedRepo = getRepo(repoId);
           if (addedRepo) {
             const notifResults = await dispatchReleaseNotifications(
               addedRepo,
-              { id: 0, prerelease: 0, created_at: new Date().toISOString(), ...releaseRecord },
+              {
+                id: 0,
+                repo_id: repoId,
+                tag_name: latestRelease.tag_name,
+                name: latestRelease.name,
+                body: latestRelease.body,
+                published_at: latestRelease.published_at,
+                html_url: latestRelease.html_url,
+                created_at: new Date().toISOString(),
+                prerelease: latestRelease.prerelease ? 1 : 0,
+              },
               versionTag
             );
             if (notifResults.some((r: any) => r.success)) {
@@ -326,7 +371,7 @@ app.post('/api/repos', async (req, res) => {
         }
       }
 
-      return res.status(201).json({ message: 'AUR Package added successfully' });
+      return res.status(201).json({ message: 'Docker Hub image added successfully' });
     }
 
     // GitHub Repo Logic
@@ -441,13 +486,13 @@ app.post('/api/repos/bulk', async (req, res) => {
 
   const itemsToProcess = Array.from(parsedMap.values());
   if (itemsToProcess.length === 0) {
-    return res.status(400).json({ error: 'No valid repositories or AUR packages found in input list' });
+    return res.status(400).json({ error: 'No valid GitHub repositories or Docker Hub images found in input list' });
   }
 
   const results: Array<{
     owner: string;
     repo: string;
-    sourceType?: 'github' | 'aur';
+    sourceType?: 'github' | 'docker';
     status: 'success' | 'failed' | 'skipped';
     error?: string;
   }> = [];
@@ -457,7 +502,7 @@ app.post('/api/repos/bulk', async (req, res) => {
       owner: invalid,
       repo: '',
       status: 'failed',
-      error: 'Invalid format (use owner/repo, gh:owner/repo, or aur:package)'
+      error: 'Invalid format (use gh:owner/repo or docker:namespace/image)'
     });
   }
 
@@ -476,48 +521,58 @@ app.post('/api/repos/bulk', async (req, res) => {
   for (const item of itemsToProcess) {
     const { owner, repo, sourceType } = item;
     try {
-      if (sourceType === 'aur') {
-        let aurInfo;
+      if (sourceType === 'docker') {
+        let dockerInfo;
         try {
-          aurInfo = await getAurPackageInfo(repo);
+          dockerInfo = await getDockerRepoDetails(owner, repo);
         } catch (err: any) {
-          results.push({ owner: 'aur', repo, sourceType: 'aur', status: 'failed', error: err.message || 'AUR Package not found' });
+          results.push({ owner, repo, sourceType: 'docker', status: 'failed', error: err.message || 'Docker Hub image not found' });
           failCount++;
           continue;
         }
 
-        const versionTag = aurInfo.Version;
-        const ownerName = aurInfo.Maintainer || 'aur';
-        const avatarUrl = 'https://upload.wikimedia.org/wikipedia/commons/a/a3/Archlinux-icon-crystal-64.svg';
+        const [latestRelease, avatarUrl] = await Promise.all([
+          getLatestDockerRelease(owner, repo, effectiveBulkPrereleases, true, dockerInfo),
+          getDockerRepoAvatar(dockerInfo.namespace || owner, dockerInfo.name || repo),
+        ]);
+        const versionTag = latestRelease ? latestRelease.tag_name : null;
 
-        const result = addRepo(ownerName, aurInfo.Name, {
-          source_type: 'aur',
-          description: aurInfo.Description,
-          language: 'PKGBUILD',
-          stargazers_count: aurInfo.NumVotes,
-          popularity: aurInfo.Popularity,
+        const result = addRepo(dockerInfo.namespace || owner, dockerInfo.name || repo, {
+          source_type: 'docker',
+          description: dockerInfo.description || `Docker Hub image ${dockerInfo.namespace || owner}/${dockerInfo.name || repo}`,
+          language: 'Docker',
+          stargazers_count: dockerInfo.star_count ?? 0,
+          pull_count: dockerInfo.pull_count ?? 0,
           avatar_url: avatarUrl,
           last_tag: versionTag,
           last_notified_tag: versionTag,
-          include_prereleases: 0,
+          include_prereleases: effectiveBulkPrereleases ? 1 : 0,
           check_interval: effectiveBulkInterval,
           group_id: effectiveBulkGroupId,
           notifications_enabled: effectiveBulkNotifications,
         });
 
-        if (result.lastInsertRowid) {
-          const repoId = Number(result.lastInsertRowid);
-          addRelease({
-            repo_id: repoId,
-            tag_name: versionTag,
-            name: `AUR ${aurInfo.Name} ${versionTag}`,
-            body: `**Maintainer:** ${aurInfo.Maintainer || 'Orphaned'} | **Votes:** ${aurInfo.NumVotes} | **Popularity:** ${aurInfo.Popularity.toFixed(2)}${aurInfo.OutOfDate ? ' | ⚠️ **Out of Date**' : ''}\n\n${aurInfo.Description}\n\n[AUR Package Page](https://aur.archlinux.org/packages/${aurInfo.Name})${aurInfo.URL ? ` • [Upstream Website](${aurInfo.URL})` : ''}`,
-            published_at: aurInfo.LastModified ? new Date(aurInfo.LastModified * 1000).toISOString() : new Date().toISOString(),
-            html_url: `https://aur.archlinux.org/packages/${aurInfo.Name}`,
-          });
+        try {
+          if (result.lastInsertRowid) {
+            const repoId = Number(result.lastInsertRowid);
+            const recentTags = await getDockerReleases(owner, repo, 5, dockerInfo);
+            for (const rel of recentTags) {
+              addRelease({
+                repo_id: repoId,
+                tag_name: rel.tag_name,
+                name: rel.name,
+                body: rel.body,
+                published_at: rel.published_at,
+                html_url: rel.html_url,
+                prerelease: rel.prerelease ? 1 : 0,
+              });
+            }
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch tag history for Docker ${owner}/${repo}`, e);
         }
 
-        results.push({ owner: 'aur', repo: aurInfo.Name, sourceType: 'aur', status: 'success' });
+        results.push({ owner: dockerInfo.namespace || owner, repo: dockerInfo.name || repo, sourceType: 'docker', status: 'success' });
         successCount++;
       } else {
         // GitHub
@@ -645,19 +700,24 @@ app.get('/api/repos/:id/releases', async (req, res) => {
     if (releases.length === 0) {
       const repo = getRepo(parseInt(id));
       if (repo) {
-        if (repo.source_type === 'aur') {
-          const aurInfo = await getAurPackageInfo(repo.repo);
-          if (aurInfo) {
+        if (repo.source_type === 'docker') {
+          let dockerInfo = null;
+          try {
+            dockerInfo = await getDockerRepoDetails(repo.owner, repo.repo);
+          } catch {}
+          const dockerReleases = await getDockerReleases(repo.owner, repo.repo, 15, dockerInfo);
+          for (const rel of dockerReleases) {
             addRelease({
               repo_id: repo.id,
-              tag_name: aurInfo.Version,
-              name: `AUR ${aurInfo.Name} ${aurInfo.Version}`,
-              body: `**Maintainer:** ${aurInfo.Maintainer || 'Orphaned'} | **Votes:** ${aurInfo.NumVotes} | **Popularity:** ${aurInfo.Popularity.toFixed(2)}${aurInfo.OutOfDate ? ' | ⚠️ **Out of Date**' : ''}\n\n${aurInfo.Description}\n\n[AUR Package Page](https://aur.archlinux.org/packages/${aurInfo.Name})${aurInfo.URL ? ` • [Upstream Website](${aurInfo.URL})` : ''}`,
-              published_at: aurInfo.LastModified ? new Date(aurInfo.LastModified * 1000).toISOString() : new Date().toISOString(),
-              html_url: `https://aur.archlinux.org/packages/${aurInfo.Name}`,
+              tag_name: rel.tag_name,
+              name: rel.name,
+              body: rel.body,
+              published_at: rel.published_at,
+              html_url: rel.html_url,
+              prerelease: rel.prerelease ? 1 : 0,
             });
-            releases = getDbReleases(parseInt(id));
           }
+          releases = getDbReleases(parseInt(id));
         } else {
           const githubReleases = await getGithubReleases(repo.owner, repo.repo);
           for (const rel of githubReleases) {
@@ -692,7 +752,7 @@ const parseUtcTimestamp = (ts?: string): number => {
 
 // Helper to dispatch notifications for a newly detected release or pending update
 const dispatchReleaseNotifications = async (repo: any, releaseRecord: any, newTag: string) => {
-  const repoLabel = repo.source_type === 'aur' ? `aur/${repo.repo}` : `${repo.owner}/${repo.repo}`;
+  const repoLabel = repo.source_type === 'docker' ? `docker/${repo.owner}/${repo.repo}` : `${repo.owner}/${repo.repo}`;
 
   if (repo.notifications_enabled === 0) {
     const msg = 'Notifications are muted for this repository.';
@@ -767,64 +827,72 @@ const dispatchReleaseNotifications = async (repo: any, releaseRecord: any, newTa
   }
 };
 
-// Helper to update a single repo or AUR package
+// Helper to update a single GitHub repository or Docker Hub image
 const updateRepoReleases = async (repo: any, forceRefresh = false) => {
   let updated = false;
   let notificationResults: any[] = [];
 
   try {
-    if (repo.source_type === 'aur') {
-      const aurInfo = await getAurPackageInfo(repo.repo);
-      if (aurInfo) {
-        const versionTag = aurInfo.Version;
-        const ownerName = aurInfo.Maintainer || 'aur';
+    if (repo.source_type === 'docker') {
+      const dockerInfo = await getDockerRepoDetails(repo.owner, repo.repo, forceRefresh);
+      const latestRelease = await getLatestDockerRelease(
+        repo.owner,
+        repo.repo,
+        !!repo.include_prereleases,
+        forceRefresh,
+        dockerInfo
+      );
 
+      if (latestRelease) {
         const releaseRecord = {
           id: 0,
           repo_id: repo.id,
-          tag_name: versionTag,
-          name: `AUR ${aurInfo.Name} ${versionTag}`,
-          body: `**Maintainer:** ${aurInfo.Maintainer || 'Orphaned'} | **Votes:** ${aurInfo.NumVotes} | **Popularity:** ${aurInfo.Popularity.toFixed(2)}${aurInfo.OutOfDate ? ' | ⚠️ **Out of Date**' : ''}\n\n${aurInfo.Description}\n\n[AUR Package Page](https://aur.archlinux.org/packages/${aurInfo.Name})${aurInfo.URL ? ` • [Upstream Website](${aurInfo.URL})` : ''}`,
-          published_at: aurInfo.LastModified ? new Date(aurInfo.LastModified * 1000).toISOString() : new Date().toISOString(),
-          html_url: `https://aur.archlinux.org/packages/${aurInfo.Name}`,
+          tag_name: latestRelease.tag_name,
+          name: latestRelease.name,
+          body: latestRelease.body,
+          published_at: latestRelease.published_at,
+          html_url: latestRelease.html_url,
           created_at: new Date().toISOString(),
-          prerelease: 0,
+          prerelease: latestRelease.prerelease ? 1 : 0,
         };
 
         addRelease(releaseRecord);
 
-        const isNewTag = Boolean(versionTag && versionTag !== repo.last_tag);
+        const isNewTag = Boolean(latestRelease.tag_name && latestRelease.tag_name !== repo.last_tag);
         const hasPendingInstalledUpdate = Boolean(
           repo.installed_version &&
-          versionTag &&
-          repo.installed_version !== versionTag &&
-          repo.last_notified_tag !== versionTag
+          latestRelease.tag_name &&
+          repo.installed_version !== latestRelease.tag_name &&
+          repo.last_notified_tag !== latestRelease.tag_name
         );
 
         if (isNewTag) {
-          console.log(`New release found for AUR ${repo.repo}: ${versionTag}`);
-          updateLastTag(repo.id, versionTag);
+          console.log(`New tag found for Docker Hub ${repo.owner}/${repo.repo}: ${latestRelease.tag_name}`);
+          updateLastTag(repo.id, latestRelease.tag_name);
           updated = true;
         } else {
           touchRepo(repo.id);
         }
 
         if (isNewTag || hasPendingInstalledUpdate) {
-          notificationResults = await dispatchReleaseNotifications(repo, releaseRecord, versionTag);
+          notificationResults = await dispatchReleaseNotifications(repo, releaseRecord, latestRelease.tag_name);
           if (notificationResults.some((r: any) => r.success)) {
-            updateLastNotifiedTag(repo.id, versionTag);
+            updateLastNotifiedTag(repo.id, latestRelease.tag_name);
           }
         }
-
-        updateRepo(repo.id, {
-          owner: ownerName,
-          description: aurInfo.Description,
-          language: 'PKGBUILD',
-          stargazers_count: aurInfo.NumVotes,
-          popularity: aurInfo.Popularity,
-          avatar_url: 'https://upload.wikimedia.org/wikipedia/commons/a/a3/Archlinux-icon-crystal-64.svg',
-        });
+      } else {
+        touchRepo(repo.id);
       }
+
+      const avatarUrl = await getDockerRepoAvatar(repo.owner, repo.repo, forceRefresh);
+
+      updateRepo(repo.id, {
+        description: dockerInfo.description || `Docker Hub image ${repo.owner}/${repo.repo}`,
+        language: 'Docker',
+        stargazers_count: dockerInfo.star_count ?? 0,
+        pull_count: dockerInfo.pull_count ?? 0,
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      });
     } else {
       // GitHub
       const release = await getLatestRelease(repo.owner, repo.repo, !!repo.include_prereleases, forceRefresh);
@@ -985,28 +1053,31 @@ app.post('/api/repos/:id/refresh', async (req, res) => {
 // Run scheduler tick every minute so per-repo and default check intervals are respected accurately
 cron.schedule('* * * * *', () => checkReleases(true));
 
-import path from 'path';
+async function startServer() {
+  // Vite Middleware
+  if (process.env.NODE_ENV === 'production') {
+    // Serve static files from dist
+    app.use(express.static(path.join(process.cwd(), 'dist')));
 
-// ... (imports)
+    // Handle SPA routing
+    app.get('*', (req, res) => {
+      if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
+      res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+    });
+  } else {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  }
 
-// Vite Middleware
-if (process.env.NODE_ENV === 'production') {
-  // Serve static files from dist
-  app.use(express.static(path.join(process.cwd(), 'dist')));
-
-  // Handle SPA routing
-  app.get('*', (req, res) => {
-    if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
-    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://localhost:${PORT}`);
   });
-} else {
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: 'spa',
-  });
-  app.use(vite.middlewares);
 }
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

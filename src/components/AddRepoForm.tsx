@@ -101,7 +101,7 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
           }`}
         >
           <Plus className="w-3.5 h-3.5" />
-          SINGLE REPOSITORY / PKG
+          SINGLE REPOSITORY / IMAGE
         </button>
         <button
           type="button"
@@ -129,7 +129,7 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
             {/* Main Input */}
             <div>
               <label className="block text-[0.65rem] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1">
-                REPOSITORY (GITHUB OR AUR PACKAGE)
+                SOURCE (GITHUB REPOSITORY OR DOCKER HUB IMAGE)
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -139,13 +139,13 @@ export const AddRepoForm: React.FC<AddRepoFormProps> = ({
                   type="text"
                   value={repoString}
                   onChange={(e) => setRepoString(e.target.value)}
-                  placeholder="gh:facebook/react or aur:yay"
+                  placeholder="gh:facebook/react or docker:linuxserver/plex or nginx"
                   className="block w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder-zinc-400 text-xs font-mono uppercase focus:border-blue-500 outline-none"
                   required
                 />
               </div>
               <p className="mt-1 text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase">
-                PREFIXES: <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 text-blue-600 dark:text-blue-400">gh:owner/repo</code> FOR GITHUB, <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 text-purple-600 dark:text-purple-400">aur:pkgname</code> FOR AUR.
+                PREFIXES: <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 text-blue-600 dark:text-blue-400">gh:owner/repo</code> FOR GITHUB, <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 text-cyan-600 dark:text-cyan-400">docker:org/image</code> OR <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 text-cyan-600 dark:text-cyan-400">docker:nginx</code> FOR DOCKER HUB.
               </p>
             </div>
 

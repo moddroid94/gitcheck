@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, FileText, Loader2, Save, CheckCircle, User, ThumbsUp, Flame, ExternalLink, Bell, BellOff } from 'lucide-react';
+import { X, Settings, FileText, Loader2, Save, CheckCircle, Container, ExternalLink, Bell, BellOff } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import axios from 'axios';
@@ -93,7 +93,14 @@ export const RepoDetails: React.FC<RepoDetailsProps> = ({ repo, onClose, onUpdat
     }
   };
 
-  const isAur = repo.source_type === 'aur';
+  const isDocker = repo.source_type === 'docker';
+  const formatPulls = (count?: number) => {
+    if (count === undefined || count === null) return '0';
+    if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+    if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+    return String(count);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-mono">
@@ -107,28 +114,32 @@ export const RepoDetails: React.FC<RepoDetailsProps> = ({ repo, onClose, onUpdat
                 alt={repo.owner}
                 className="w-10 h-10 border border-zinc-300 dark:border-zinc-700 object-contain p-0.5 bg-white dark:bg-zinc-800 shrink-0"
               />
+            ) : isDocker ? (
+              <div className="w-10 h-10 border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/50 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
+                <Container className="w-5 h-5" />
+              </div>
             ) : (
               <div className="w-10 h-10 border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 font-bold font-syne text-sm shrink-0">
-                {repo.owner[0]?.toUpperCase() || 'A'}
+                {repo.owner[0]?.toUpperCase() || 'G'}
               </div>
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span
                   className={`px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider font-mono ${
-                    isAur
-                      ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                    isDocker
+                      ? 'bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800'
                       : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
                   }`}
                 >
-                  {isAur ? 'AUR PKG' : 'GITHUB REPO'}
+                  {isDocker ? 'DOCKER HUB' : 'GITHUB REPO'}
                 </span>
                 <h2 className="font-syne font-extrabold text-lg sm:text-xl uppercase text-zinc-900 dark:text-white truncate">
-                  {isAur ? repo.repo : `${repo.owner}/${repo.repo}`}
+                  {`${repo.owner}/${repo.repo}`}
                 </h2>
               </div>
               <p className="text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mt-0.5">
-                {isAur ? `MAINTAINER: ${repo.owner || 'ORPHANED'} • ` : ''}LAST CHECKED:{' '}
+                {isDocker ? `NAMESPACE: ${repo.owner || 'library'} • ` : ''}LAST CHECKED:{' '}
                 {repo.updated_at ? formatDistanceToNow(new Date(repo.updated_at), { addSuffix: true }) : 'NEVER'}
               </p>
             </div>
@@ -171,23 +182,23 @@ export const RepoDetails: React.FC<RepoDetailsProps> = ({ repo, onClose, onUpdat
         <div className="flex-1 overflow-y-auto p-5 bg-zinc-100/60 dark:bg-black/40">
           {activeTab === 'changelog' ? (
             <div className="space-y-4">
-              {/* AUR Stats Header Card */}
-              {isAur && (
+              {/* Docker Hub Stats Header Card */}
+              {isDocker && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                  <div className="bg-white dark:bg-[#18181b] p-3 border-l-2 border-purple-500 border-zinc-200 dark:border-zinc-800">
-                    <p className="text-[0.6rem] font-bold uppercase text-purple-600 dark:text-purple-400 tracking-wider">MAINTAINER</p>
-                    <p className="text-sm font-bold text-zinc-900 dark:text-white uppercase truncate">{repo.owner || 'ORPHANED'}</p>
+                  <div className="bg-white dark:bg-[#18181b] p-3 border border-zinc-200 dark:border-zinc-800 border-l-2 border-l-cyan-500">
+                    <p className="text-[0.6rem] font-bold uppercase text-cyan-600 dark:text-cyan-400 tracking-wider">NAMESPACE</p>
+                    <p className="text-sm font-bold text-zinc-900 dark:text-white uppercase truncate">{repo.owner || 'library'}</p>
                   </div>
 
-                  <div className="bg-white dark:bg-[#18181b] p-3 border-l-2 border-emerald-500 border-zinc-200 dark:border-zinc-800">
-                    <p className="text-[0.6rem] font-bold uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">VOTES</p>
+                  <div className="bg-white dark:bg-[#18181b] p-3 border border-zinc-200 dark:border-zinc-800 border-l-2 border-l-amber-500">
+                    <p className="text-[0.6rem] font-bold uppercase text-amber-600 dark:text-amber-400 tracking-wider">STARS</p>
                     <p className="text-sm font-bold text-zinc-900 dark:text-white">{repo.stargazers_count?.toLocaleString() || 0}</p>
                   </div>
 
-                  <div className="bg-white dark:bg-[#18181b] p-3 border-l-2 border-amber-500 border-zinc-200 dark:border-zinc-800">
-                    <p className="text-[0.6rem] font-bold uppercase text-amber-600 dark:text-amber-400 tracking-wider">POPULARITY</p>
+                  <div className="bg-white dark:bg-[#18181b] p-3 border border-zinc-200 dark:border-zinc-800 border-l-2 border-l-blue-500">
+                    <p className="text-[0.6rem] font-bold uppercase text-blue-600 dark:text-blue-400 tracking-wider">TOTAL PULLS</p>
                     <p className="text-sm font-bold text-zinc-900 dark:text-white">
-                      {repo.popularity !== undefined && repo.popularity !== null ? repo.popularity.toFixed(2) : 'N/A'}
+                      {formatPulls(repo.pull_count)}
                     </p>
                   </div>
                 </div>
@@ -247,7 +258,7 @@ export const RepoDetails: React.FC<RepoDetailsProps> = ({ repo, onClose, onUpdat
                             className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 uppercase font-bold"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
-                            {isAur ? 'AUR' : 'GITHUB'}
+                            {isDocker ? 'DOCKER HUB' : 'GITHUB'}
                           </a>
                         </div>
                       </div>

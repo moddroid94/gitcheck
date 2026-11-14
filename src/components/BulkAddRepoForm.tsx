@@ -96,16 +96,16 @@ export const BulkAddRepoForm: React.FC<BulkAddRepoFormProps> = ({
     <form onSubmit={handleSubmit} className="w-full space-y-4 font-mono text-xs">
       <div>
         <label className="block text-[0.65rem] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1">
-          REPOSITORIES LIST (ONE PER LINE)
+          REPOSITORIES / IMAGES LIST (ONE PER LINE)
         </label>
         <p className="text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase mb-2">
-          USE <code className="bg-zinc-200 dark:bg-zinc-800 px-1 text-blue-600 dark:text-blue-400">gh:owner/repo</code> FOR GITHUB OR <code className="bg-zinc-200 dark:bg-zinc-800 px-1 text-purple-600 dark:text-purple-400">aur:pkgname</code> FOR AUR.
+          USE <code className="bg-zinc-200 dark:bg-zinc-800 px-1 text-blue-600 dark:text-blue-400">gh:owner/repo</code> FOR GITHUB OR <code className="bg-zinc-200 dark:bg-zinc-800 px-1 text-cyan-600 dark:text-cyan-400">docker:org/image</code> FOR DOCKER HUB.
         </p>
         <textarea
           rows={5}
           value={repoListText}
           onChange={(e) => setRepoListText(e.target.value)}
-          placeholder={`gh:facebook/react\naur:yay\naur:google-chrome`}
+          placeholder={`gh:facebook/react\ndocker:nginx\ndocker:linuxserver/plex`}
           className="block w-full p-3 border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder-zinc-400 font-mono text-xs uppercase outline-none focus:border-blue-500"
           required
         />

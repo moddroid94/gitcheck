@@ -10,14 +10,14 @@ export interface Repo {
   id: number;
   owner: string;
   repo: string;
-  source_type?: 'github' | 'aur';
+  source_type?: 'github' | 'docker';
   last_tag: string;
   last_notified_tag?: string | null;
   installed_version?: string;
   description?: string;
   language?: string;
   stargazers_count?: number;
-  popularity?: number;
+  pull_count?: number;
   avatar_url?: string;
   check_interval: number;
   include_prereleases: number; // 0 or 1

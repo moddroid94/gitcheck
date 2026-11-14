@@ -7,8 +7,8 @@ import {
   CheckCircle,
   RefreshCw,
   FileText,
-  ThumbsUp,
-  Flame,
+  Download,
+  Container,
   Bell,
   BellOff,
 } from 'lucide-react';
@@ -32,7 +32,19 @@ export const RepoRow: React.FC<RepoRowProps> = ({ repo, onDelete, onSelect, onUp
 
   const hasUpdate = repo.installed_version && repo.last_tag && repo.installed_version !== repo.last_tag;
   const isUpToDate = repo.installed_version && repo.last_tag && repo.installed_version === repo.last_tag;
-  const isAur = repo.source_type === 'aur';
+  const isDocker = repo.source_type === 'docker';
+  const dockerHubUrl =
+    repo.owner === 'library'
+      ? `https://hub.docker.com/_/${repo.repo}`
+      : `https://hub.docker.com/r/${repo.owner}/${repo.repo}`;
+
+  const formatPulls = (count?: number) => {
+    if (count === undefined || count === null) return '0';
+    if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+    if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+    return String(count);
+  };
 
   const handleRefresh = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -78,24 +90,28 @@ export const RepoRow: React.FC<RepoRowProps> = ({ repo, onDelete, onSelect, onUp
                 alt={repo.owner}
                 className="w-8 h-8 border border-zinc-300 dark:border-zinc-700 object-contain p-0.5 bg-white dark:bg-zinc-800 shrink-0"
               />
+            ) : isDocker ? (
+              <div className="w-8 h-8 border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/50 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
+                <Container className="w-4 h-4" />
+              </div>
             ) : (
               <div className="w-8 h-8 border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 font-bold font-syne text-xs shrink-0">
-                {repo.owner[0]?.toUpperCase() || 'A'}
+                {repo.owner[0]?.toUpperCase() || 'G'}
               </div>
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span
                   className={`px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider font-mono ${
-                    isAur
-                      ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                    isDocker
+                      ? 'bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800'
                       : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
                   }`}
                 >
-                  {isAur ? 'AUR' : 'GITHUB'}
+                  {isDocker ? 'DOCKER' : 'GITHUB'}
                 </span>
                 <a
-                  href={isAur ? `https://aur.archlinux.org/packages/${repo.repo}` : `https://github.com/${repo.owner}/${repo.repo}`}
+                  href={isDocker ? dockerHubUrl : `https://github.com/${repo.owner}/${repo.repo}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-syne font-extrabold text-sm uppercase text-zinc-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate max-w-[200px] sm:max-w-[280px]"
@@ -120,7 +136,7 @@ export const RepoRow: React.FC<RepoRowProps> = ({ repo, onDelete, onSelect, onUp
                 )}
               </div>
               <p className="text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mt-0.5 truncate">
-                {isAur ? `MAINTAINER: ${repo.owner || 'ORPHANED'}` : repo.owner}
+                {isDocker ? `DOCKER HUB / ${repo.owner || 'library'}` : repo.owner}
               </p>
             </div>
           </div>
@@ -168,18 +184,18 @@ export const RepoRow: React.FC<RepoRowProps> = ({ repo, onDelete, onSelect, onUp
 
         {/* Stats Column */}
         <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400 uppercase">
-          {isAur ? (
+          {isDocker ? (
             <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold" title="Votes">
-                <ThumbsUp className="w-3 h-3" />
-                {repo.stargazers_count?.toLocaleString() || 0}
-              </span>
-              {repo.popularity !== undefined && repo.popularity !== null && (
-                <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold" title="Popularity">
-                  <Flame className="w-3 h-3" />
-                  {repo.popularity.toFixed(2)}
+              {repo.pull_count !== undefined && repo.pull_count !== null && (
+                <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-bold" title="Total Pulls">
+                  <Download className="w-3 h-3" />
+                  {formatPulls(repo.pull_count)}
                 </span>
               )}
+              <span className="inline-flex items-center gap-1 font-bold text-zinc-800 dark:text-zinc-200" title="Stars">
+                <Star className="w-3.5 h-3.5 text-amber-500" />
+                {repo.stargazers_count?.toLocaleString() || 0}
+              </span>
             </div>
           ) : (
             <div className="flex items-center gap-3">

@@ -35,8 +35,62 @@ import { useTheme } from '../context/ThemeContext';
 type SortOption = 'updated_at' | 'stargazers_count' | 'name';
 type SortOrder = 'asc' | 'desc';
 type ViewMode = 'grid' | 'list' | 'grouped';
+type SourceFilter = 'all' | 'github' | 'docker';
+type GroupFilter = 'all' | 'ungrouped' | number;
+
+interface StoredUiSettings {
+  viewMode: ViewMode;
+  sortBy: SortOption;
+  sortOrder: SortOrder;
+  showUpdatesOnly: boolean;
+  selectedSourceFilter: SourceFilter;
+  selectedGroupFilter: GroupFilter;
+}
+
+const UI_SETTINGS_STORAGE_KEY = 'gitmonitor_ui_settings';
+
+const DEFAULT_UI_SETTINGS: StoredUiSettings = {
+  viewMode: 'grid',
+  sortBy: 'updated_at',
+  sortOrder: 'desc',
+  showUpdatesOnly: false,
+  selectedSourceFilter: 'all',
+  selectedGroupFilter: 'all',
+};
+
+const loadStoredUiSettings = (): StoredUiSettings => {
+  try {
+    const raw = localStorage.getItem(UI_SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_UI_SETTINGS;
+    const parsed = JSON.parse(raw);
+    return {
+      viewMode: parsed.viewMode === 'grid' || parsed.viewMode === 'list' || parsed.viewMode === 'grouped'
+        ? parsed.viewMode
+        : DEFAULT_UI_SETTINGS.viewMode,
+      sortBy: parsed.sortBy === 'updated_at' || parsed.sortBy === 'stargazers_count' || parsed.sortBy === 'name'
+        ? parsed.sortBy
+        : DEFAULT_UI_SETTINGS.sortBy,
+      sortOrder: parsed.sortOrder === 'asc' || parsed.sortOrder === 'desc'
+        ? parsed.sortOrder
+        : DEFAULT_UI_SETTINGS.sortOrder,
+      showUpdatesOnly: typeof parsed.showUpdatesOnly === 'boolean'
+        ? parsed.showUpdatesOnly
+        : DEFAULT_UI_SETTINGS.showUpdatesOnly,
+      selectedSourceFilter: parsed.selectedSourceFilter === 'all' || parsed.selectedSourceFilter === 'github' || parsed.selectedSourceFilter === 'docker'
+        ? parsed.selectedSourceFilter
+        : DEFAULT_UI_SETTINGS.selectedSourceFilter,
+      selectedGroupFilter: parsed.selectedGroupFilter === 'all' || parsed.selectedGroupFilter === 'ungrouped' || (typeof parsed.selectedGroupFilter === 'number' && Number.isFinite(parsed.selectedGroupFilter))
+        ? parsed.selectedGroupFilter
+        : DEFAULT_UI_SETTINGS.selectedGroupFilter,
+    };
+  } catch {
+    return DEFAULT_UI_SETTINGS;
+  }
+};
 
 export const RepoList: React.FC = () => {
+  const initialUiSettings = useMemo(() => loadStoredUiSettings(), []);
+
   const [repos, setRepos] = useState<Repo[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,17 +100,17 @@ export const RepoList: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
 
   // Group & View State
-  const [selectedGroupFilter, setSelectedGroupFilter] = useState<'all' | 'ungrouped' | number>('all');
-  const [selectedSourceFilter, setSelectedSourceFilter] = useState<'all' | 'github' | 'aur'>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState<GroupFilter>(initialUiSettings.selectedGroupFilter);
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState<SourceFilter>(initialUiSettings.selectedSourceFilter);
+  const [viewMode, setViewMode] = useState<ViewMode>(initialUiSettings.viewMode);
   const [isGroupManagerOpen, setIsGroupManagerOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Search and Sort State
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('updated_at');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [showUpdatesOnly, setShowUpdatesOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>(initialUiSettings.sortBy);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(initialUiSettings.sortOrder);
+  const [showUpdatesOnly, setShowUpdatesOnly] = useState(initialUiSettings.showUpdatesOnly);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addModalTab, setAddModalTab] = useState<'single' | 'bulk'>('single');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -68,11 +122,31 @@ export const RepoList: React.FC = () => {
     showSettingsLink?: boolean;
   } | null>(null);
 
+  // Persist UI preferences to browser localStorage whenever changed
+  useEffect(() => {
+    try {
+      const payload: StoredUiSettings = {
+        viewMode,
+        sortBy,
+        sortOrder,
+        showUpdatesOnly,
+        selectedSourceFilter,
+        selectedGroupFilter,
+      };
+      localStorage.setItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [viewMode, sortBy, sortOrder, showUpdatesOnly, selectedSourceFilter, selectedGroupFilter]);
+
   const fetchGroups = async () => {
     try {
       const response = await axios.get('/api/groups');
       if (Array.isArray(response.data)) {
         setGroups(response.data);
+        if (typeof selectedGroupFilter === 'number' && !response.data.some((g: Group) => g.id === selectedGroupFilter)) {
+          setSelectedGroupFilter('all');
+        }
       }
     } catch (err) {
       console.error('Failed to fetch groups', err);
@@ -186,9 +260,9 @@ export const RepoList: React.FC = () => {
     let result = [...repos];
 
     if (selectedSourceFilter === 'github') {
-      result = result.filter((repo) => repo.source_type !== 'aur');
-    } else if (selectedSourceFilter === 'aur') {
-      result = result.filter((repo) => repo.source_type === 'aur');
+      result = result.filter((repo) => repo.source_type !== 'docker');
+    } else if (selectedSourceFilter === 'docker') {
+      result = result.filter((repo) => repo.source_type === 'docker');
     }
 
     if (selectedGroupFilter === 'ungrouped') {
@@ -241,8 +315,8 @@ export const RepoList: React.FC = () => {
   }, [repos, selectedSourceFilter, selectedGroupFilter, searchQuery, sortBy, sortOrder, showUpdatesOnly]);
 
   const ungroupedCount = useMemo(() => repos.filter((r) => !r.group_id).length, [repos]);
-  const githubCount = useMemo(() => repos.filter((r) => r.source_type !== 'aur').length, [repos]);
-  const aurCount = useMemo(() => repos.filter((r) => r.source_type === 'aur').length, [repos]);
+  const githubCount = useMemo(() => repos.filter((r) => r.source_type !== 'docker').length, [repos]);
+  const dockerCount = useMemo(() => repos.filter((r) => r.source_type === 'docker').length, [repos]);
 
   const openAddModal = (tab: 'single' | 'bulk' = 'single') => {
     setAddModalTab(tab);
@@ -356,21 +430,21 @@ export const RepoList: React.FC = () => {
 
               <button
                 onClick={() => {
-                  setSelectedSourceFilter('aur');
+                  setSelectedSourceFilter('docker');
                   setIsMobileSidebarOpen(false);
                 }}
                 className={`w-full flex items-center justify-between px-3 py-2 text-xs font-mono uppercase transition-colors border ${
-                  selectedSourceFilter === 'aur'
-                    ? 'bg-purple-600 text-white font-bold border-purple-600'
+                  selectedSourceFilter === 'docker'
+                    ? 'bg-cyan-600 text-white font-bold border-cyan-600'
                     : 'bg-transparent text-zinc-700 dark:text-zinc-300 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800'
                 }`}
               >
                 <span className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-purple-500 inline-block" />
-                  AUR PACKAGES
+                  <span className="w-1.5 h-1.5 bg-cyan-500 inline-block" />
+                  DOCKER HUB
                 </span>
                 <span className="text-[0.6rem] bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-2 py-0.5 font-bold">
-                  {aurCount}
+                  {dockerCount}
                 </span>
               </button>
             </div>
@@ -617,7 +691,7 @@ export const RepoList: React.FC = () => {
                   className="appearance-none pl-3 pr-7 py-1.5 text-xs bg-white dark:bg-[#18181b] border border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-white uppercase outline-none cursor-pointer font-mono font-semibold"
                 >
                   <option value="updated_at">LAST UPDATED</option>
-                  <option value="stargazers_count">STARS / VOTES</option>
+                  <option value="stargazers_count">STARS</option>
                   <option value="name">REPO NAME</option>
                 </select>
                 <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-zinc-400 w-3 h-3 pointer-events-none" />
@@ -863,7 +937,7 @@ export const RepoList: React.FC = () => {
             <span>NODE_STATUS: OK</span>
           </div>
           <div>
-            MONITORING {repos.length} {repos.length === 1 ? 'REPOSITORY' : 'REPOSITORIES'} ACROSS {githubCount > 0 && aurCount > 0 ? '2' : githubCount > 0 || aurCount > 0 ? '1' : '0'} SOURCES
+            MONITORING {repos.length} {repos.length === 1 ? 'REPOSITORY' : 'REPOSITORIES'} ACROSS {githubCount > 0 && dockerCount > 0 ? '2' : githubCount > 0 || dockerCount > 0 ? '1' : '0'} SOURCES
           </div>
           <div>BUILD: 2026-REL-MON</div>
         </footer>

@@ -78,10 +78,12 @@ export class TelegramNotificationProvider implements NotificationProvider {
       : new Date().toLocaleString();
     const rawHtmlUrl =
       release.html_url ||
-      (repo.source_type === 'aur'
-        ? `https://aur.archlinux.org/packages/${repo.repo}`
+      (repo.source_type === 'docker'
+        ? (repo.owner === 'library'
+            ? `https://hub.docker.com/_/${repo.repo}`
+            : `https://hub.docker.com/r/${repo.owner}/${repo.repo}`)
         : `https://github.com/${repo.owner}/${repo.repo}`);
-    const rawSourceType = repo.source_type === 'aur' ? 'AUR Package' : 'GitHub Repository';
+    const rawSourceType = repo.source_type === 'docker' ? 'Docker Hub' : 'GitHub Repository';
     const rawName = release.name || release.tag_name || repo.repo;
 
     // Plain context (for plain-text fallback without parse_mode)
@@ -277,8 +279,10 @@ export class WebhookNotificationProvider implements NotificationProvider {
       source_type: repo.source_type || 'github',
       html_url:
         release.html_url ||
-        (repo.source_type === 'aur'
-          ? `https://aur.archlinux.org/packages/${repo.repo}`
+        (repo.source_type === 'docker'
+          ? (repo.owner === 'library'
+              ? `https://hub.docker.com/_/${repo.repo}`
+              : `https://hub.docker.com/r/${repo.owner}/${repo.repo}`)
           : `https://github.com/${repo.owner}/${repo.repo}`),
       body: release.body || '',
       json_body: JSON.stringify(release.body || ''),

@@ -378,7 +378,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
                         ENABLE NOTIFICATIONS BY DEFAULT FOR NEW APPS
                       </span>
                       <p className="text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase mt-0.5">
-                        NEW REPOSITORIES AND AUR PACKAGES WILL START WITH NOTIFICATIONS ENABLED.
+                        NEW GITHUB REPOSITORIES AND DOCKER HUB IMAGES WILL START WITH NOTIFICATIONS ENABLED.
                       </p>
                     </div>
                   </label>

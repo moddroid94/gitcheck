@@ -6,7 +6,7 @@ A simple application to monitor GitHub repository releases.
 
 ## Features
 
-- Monitor multiple GitHub /AUR repositories.
+- Monitor multiple GitHub Repos or Docker Hub Images 
 - Dashboard repo card and info (grid or list view)
 - View full changelog for releases.
 - Per-repository configuration (check interval).

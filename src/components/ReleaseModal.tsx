@@ -121,7 +121,7 @@ export const ReleaseModal: React.FC<ReleaseModalProps> = ({ isOpen, onClose, rel
                   className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline font-bold uppercase"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  VIEW ON {release.html_url.includes('aur.archlinux.org') ? 'AUR' : 'GITHUB'}
+                  VIEW ON {release.html_url.includes('hub.docker.com') ? 'DOCKER HUB' : 'GITHUB'}
                 </a>
               )}
             </div>
