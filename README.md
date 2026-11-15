@@ -76,7 +76,7 @@ GitCheck tracks the releases and tags you care about, shows what is installed ve
 - SQLite database, no external database server required.
 - Automatic schema setup and lightweight migrations for existing databases.
 - Optional GitHub token for higher API rate limits.
-- Docker and Docker Compose support.
+- Docker and Docker Compose support, plus prebuilt images on Docker Hub and GHCR.
 - SPA served by Express in production, with Vite middleware in development.
 
 ## Tech stack
@@ -98,6 +98,10 @@ GitCheck tracks the releases and tags you care about, shows what is installed ve
 - **npm**.
 - On some platforms, a working C/C++ build toolchain and Python may be required to compile `better-sqlite3`. Prebuilt binaries are used where available.
 - Optional: **Docker** and **Docker Compose**.
+- Using the published container image requires neither Node.js nor npm — only Docker.
+
+> [!NOTE]
+> The prebuilt images target `linux/amd64` and `linux/arm64`. Only `linux/amd64` has been tested; see the warning under [Container images](#container-images).
 
 ### Run locally
 
@@ -137,19 +141,99 @@ Useful scripts:
 | `npm run lint` | Type-check with `tsc --noEmit` |
 | `npm run clean` | Remove the `dist/` directory |
 
-### Docker Compose (recommended for self-hosting)
+### Container images
+
+Prebuilt images are published on every push to `main`, tagged with the version from `package.json` (for example `0.1.0`) and `latest`:
+
+| Registry | Image |
+| --- | --- |
+| Docker Hub | `moddroid94/gitcheck` |
+| GHCR | `ghcr.io/moddroid94/gitcheck` |
 
 ```bash
+docker pull moddroid94/gitcheck:latest
+# or
+docker pull ghcr.io/moddroid94/gitcheck:latest
+```
+
+> [!WARNING]
+> Only the `linux/amd64` image is tested. A `linux/arm64` image is built and published alongside it, but it has **not** been verified on real ARM hardware — the native `better-sqlite3` dependency is installed for ARM under emulation during the build. If you hit a native module or database error on ARM, build the image locally instead (see [Build from source](#build-from-source)); a local build compiles native modules for your host architecture.
+
+### Docker Compose with a prebuilt image (recommended)
+
+The repository ships `compose.image.yml` for image-based deployments. `docker-compose.yml` is unchanged and still builds from source, so existing GitOps deployments keep working. Compose only auto-detects `compose.yaml`, `compose.yml`, `docker-compose.yaml`, and `docker-compose.yml`, so the image variant must be passed explicitly with `-f`:
+
+```bash
+git clone https://github.com/moddroid94/gitcheck.git
+cd gitcheck
 cp .env.example .env
 # Edit .env and set GITHUB_TOKEN and WEB_PORT as needed
-docker compose up -d --build
+docker compose -f compose.image.yml up -d
+```
+
+If you prefer not to clone the repository, save the following as `compose.image.yml` next to your `.env` and run the same command:
+
+```yaml
+services:
+  app:
+    image: ${GITCHECK_IMAGE:-moddroid94/gitcheck:latest}
+    pull_policy: always
+    ports:
+      - "${WEB_PORT:-6767}:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/app/data/github-monitor.db
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-60}
+    restart: unless-stopped
 ```
 
 The compose file maps `${WEB_PORT}` on the host to port `3000` inside the container. For example, with `WEB_PORT=6767`, open **http://localhost:6767**.
 
 Data is persisted in `./data`, and the container uses `/app/data/github-monitor.db` as its database path. The service restarts automatically unless stopped.
 
+To pull from GHCR instead, or to pin a specific release, set `GITCHECK_IMAGE` in `.env`:
+
+```env
+# GHCR, latest
+GITCHECK_IMAGE=ghcr.io/moddroid94/gitcheck:latest
+
+# Docker Hub, pinned version
+GITCHECK_IMAGE=moddroid94/gitcheck:0.1.0
+```
+
+> [!NOTE]
+> `docker-compose.yml` is the source-build variant and stays the default for deployments that build locally. Use `compose.image.yml` when you want to run a published release.
+
 ### Docker without Compose
+
+```bash
+docker run -d \
+  --name gitcheck \
+  -p 6767:3000 \
+  -e GITHUB_TOKEN=your_github_token \
+  -e CHECK_INTERVAL=60 \
+  -v "$(pwd)/data:/app/data" \
+  --restart unless-stopped \
+  moddroid94/gitcheck:latest
+```
+
+Substitute `ghcr.io/moddroid94/gitcheck:latest` to pull from GHCR, or a pinned version tag such as `moddroid94/gitcheck:0.1.0` instead of `latest`.
+
+### Build from source
+
+Use the default `docker-compose.yml` to build the image locally:
+
+```bash
+cp .env.example .env
+# Skip the copy above if you already have a .env
+# Edit .env and set GITHUB_TOKEN and WEB_PORT as needed
+docker compose up -d --build
+```
+
+Or build and run it directly:
 
 ```bash
 docker build -t gitcheck .
@@ -161,6 +245,8 @@ docker run -d \
   --restart unless-stopped \
   gitcheck
 ```
+
+Building locally avoids the cross-compiled ARM concern noted above, because the native modules are compiled for your host architecture.
 
 ## Configuration
 
@@ -515,6 +601,10 @@ gitcheck/
 │       └── notifications.ts      # Telegram/webhook providers
 ├── Dockerfile
 ├── docker-compose.yml
+├── compose.image.yml            # Prebuilt-image deployment variant
+├── .github/
+│   └── workflows/
+│       └── docker-publish.yml    # Multi-arch image build and push to Docker Hub + GHCR
 ├── vite.config.ts
 ├── tsconfig.json
 ├── package.json

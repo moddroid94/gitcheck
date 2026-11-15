@@ -1,0 +1,23 @@
+# Image-based deployment: pulls the published image instead of building from source.
+# The default docker-compose.yml is unchanged and still builds locally.
+#
+#   docker compose -f compose.image.yml up -d
+#
+# Override the image with GITCHECK_IMAGE in .env, for example:
+#   GITCHECK_IMAGE=ghcr.io/moddroid94/gitcheck:latest
+#   GITCHECK_IMAGE=moddroid94/gitcheck:0.1.0
+
+services:
+  app:
+    image: ${GITCHECK_IMAGE:-moddroid94/gitcheck:latest}
+    pull_policy: always
+    ports:
+      - "${WEB_PORT:-6767}:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/app/data/github-monitor.db
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-60}
+    restart: unless-stopped
