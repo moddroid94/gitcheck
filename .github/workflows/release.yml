@@ -1,0 +1,75 @@
+name: Publish Release
+
+# Creates a GitHub release and tag from the version in package.json.
+# Runs after a push to main; skips silently when the release already exists,
+# so bump the version in package.json to cut a new release.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version from package.json
+        id: pkg
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          # Drop semver build metadata ('+sha') because git refs cannot contain it.
+          VERSION="${VERSION%%+*}"
+          # Validate as a git tag: no spaces, '~', '^', ':', '?', '*', '[', '\\', '..', '@{'.
+          if [[ ! "$VERSION" =~ ^[0-9A-Za-z_][0-9A-Za-z._-]{0,127}$ ]]; then
+            echo "::error::Invalid version in package.json: '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.pkg.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists but has no release. Delete the tag or bump the version."
+            exit 1
+          else
+            echo "Release $TAG does not exist yet."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release and tag
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.pkg.outputs.tag }}" \
+            --target "$GITHUB_SHA" \
+            --title "${{ steps.pkg.outputs.tag }}" \
+            --generate-notes
+
+      # A release created with GITHUB_TOKEN does not trigger other workflows,
+      # so start the image build explicitly against the new tag.
+      - name: Trigger image build
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run docker-publish.yml --ref "${{ steps.pkg.outputs.tag }}"

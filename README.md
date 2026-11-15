@@ -143,7 +143,7 @@ Useful scripts:
 
 ### Container images
 
-Prebuilt images are published on every push to `main`, tagged with the version from `package.json` (for example `0.1.0`) and `latest`:
+Prebuilt images are built and pushed when a GitHub release is published, or manually from the Actions tab. They are tagged with the version from `package.json` (for example `0.1.0`) and `latest`:
 
 | Registry | Image |
 | --- | --- |
@@ -155,6 +155,8 @@ docker pull moddroid94/gitcheck:latest
 # or
 docker pull ghcr.io/moddroid94/gitcheck:latest
 ```
+
+Each version also gets a matching GitHub release and `v<version>` git tag (for example `v0.1.0`), created automatically on `main` when the version in `package.json` changes. Publishing the release starts the image build. Pre-releases are tagged with their version but do not move `latest`.
 
 > [!WARNING]
 > Only the `linux/amd64` image is tested. A `linux/arm64` image is built and published alongside it, but it has **not** been verified on real ARM hardware — the native `better-sqlite3` dependency is installed for ARM under emulation during the build. If you hit a native module or database error on ARM, build the image locally instead (see [Build from source](#build-from-source)); a local build compiles native modules for your host architecture.
@@ -604,7 +606,8 @@ gitcheck/
 ├── compose.image.yml            # Prebuilt-image deployment variant
 ├── .github/
 │   └── workflows/
-│       └── docker-publish.yml    # Multi-arch image build and push to Docker Hub + GHCR
+│       ├── docker-publish.yml    # Multi-arch image build and push to Docker Hub + GHCR
+│       └── release.yml           # GitHub release and tag from the package.json version
 ├── vite.config.ts
 ├── tsconfig.json
 ├── package.json

@@ -1,8 +1,12 @@
 name: Build and Push Docker Image
 
+# Builds on published GitHub releases and manual dispatch, not on every push.
+# Releases created by a GITHUB_TOKEN do not emit events that trigger workflows,
+# so .github/workflows/release.yml dispatches this workflow explicitly.
+
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
@@ -32,6 +36,17 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Verify release tag matches package.json
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          if [[ "$TAG" != "v$VERSION" ]]; then
+            echo "::error::Release tag '$TAG' does not match package.json version 'v$VERSION'"
+            exit 1
+          fi
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -60,7 +75,7 @@ jobs:
             ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=${{ steps.pkg.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.event_name != 'release' || !github.event.release.prerelease }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
