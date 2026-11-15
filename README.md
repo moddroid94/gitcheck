@@ -250,6 +250,8 @@ docker run -d \
 
 Building locally avoids the cross-compiled ARM concern noted above, because the native modules are compiled for your host architecture.
 
+The `Dockerfile` is a multi-stage build: a full dependency stage, a frontend build stage that copies only build inputs, a production-dependency stage, and a final `node:20-slim` runtime stage with no devDependencies or compiler toolchain. Dependency layers stay cached until `package.json` or `package-lock.json` change, so source-only rebuilds skip the install step.
+
 ## Configuration
 
 GitCheck reads configuration from environment variables and a `.env` file.
@@ -601,7 +603,7 @@ gitcheck/
 │       ├── github.ts             # GitHub API client and cache
 │       ├── dockerhub.ts          # Docker Hub API client and tag logic
 │       └── notifications.ts      # Telegram/webhook providers
-├── Dockerfile
+├── Dockerfile                    # Multi-stage: deps → build → prod-deps → slim runtime
 ├── docker-compose.yml
 ├── compose.image.yml            # Prebuilt-image deployment variant
 ├── .github/
