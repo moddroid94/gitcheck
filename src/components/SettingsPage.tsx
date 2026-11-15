@@ -109,6 +109,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
           telegram_enabled: true,
           telegram_bot_token: settings.telegram_bot_token,
           telegram_chat_id: settings.telegram_chat_id,
+          telegram_topic_id: settings.telegram_topic_id,
           telegram_template: settings.telegram_template,
         },
       });
@@ -123,6 +124,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
         telegram_enabled: true,
         telegram_bot_token: nextSettings.telegram_bot_token,
         telegram_chat_id: nextSettings.telegram_chat_id,
+        telegram_topic_id: nextSettings.telegram_topic_id,
         telegram_template: nextSettings.telegram_template,
       });
 
@@ -483,6 +485,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, groups }) =>
                         className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-white text-xs font-mono outline-none focus:border-blue-500"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[0.65rem] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1">
+                      TOPIC / MESSAGE THREAD ID (OPTIONAL)
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={settings.telegram_topic_id}
+                      onChange={(e) =>
+                        setSettings({ ...settings, telegram_topic_id: e.target.value })
+                      }
+                      placeholder="e.g. 42"
+                      className="block w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-white text-xs font-mono outline-none focus:border-blue-500"
+                    />
+                    <p className="mt-1 text-[0.65rem] text-zinc-500 dark:text-zinc-400 uppercase">
+                      FOR FORUM GROUPS ONLY. USE THE LAST NUMBER IN THE TOPIC LINK. LEAVE BLANK TO SEND TO THE CHAT&apos;S DEFAULT TIMELINE.
+                    </p>
                   </div>
 
                   <div>

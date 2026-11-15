@@ -64,6 +64,7 @@ export interface SystemSettings {
   telegram_enabled: boolean;
   telegram_bot_token: string;
   telegram_chat_id: string;
+  telegram_topic_id: string;
   telegram_template: string;
   webhook_enabled: boolean;
   webhook_url: string;
@@ -80,6 +81,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   telegram_enabled: false,
   telegram_bot_token: '',
   telegram_chat_id: '',
+  telegram_topic_id: '',
   telegram_template: '🚀 *New Release Detected!*\n\n*Repo/Package:* {{repo}}\n*Version:* `{{version}}`\n*Published:* {{published_at}}\n\n*Notes:*\n{{body}}\n\n[View Release]({{html_url}})',
   webhook_enabled: false,
   webhook_url: '',

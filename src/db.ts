@@ -273,6 +273,7 @@ export const getSystemSettings = (): SystemSettings => {
     telegram_enabled: map.telegram_enabled === 'true',
     telegram_bot_token: map.telegram_bot_token || '',
     telegram_chat_id: map.telegram_chat_id || '',
+    telegram_topic_id: map.telegram_topic_id || '',
     telegram_template: map.telegram_template || DEFAULT_SYSTEM_SETTINGS.telegram_template,
     webhook_enabled: map.webhook_enabled === 'true',
     webhook_url: map.webhook_url || '',

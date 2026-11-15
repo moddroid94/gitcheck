@@ -45,7 +45,7 @@ export function escapeTelegramMarkdown(value: string): string {
 export class TelegramNotificationProvider implements NotificationProvider {
   readonly id = 'telegram';
   readonly name = 'Telegram';
-  readonly description = 'Send release notifications to a Telegram chat, channel, or group';
+  readonly description = 'Send release notifications to a Telegram chat, channel, group, or forum topic';
 
   isEnabled(settings: any): boolean {
     const enabled = settings.telegram_enabled === true || settings.telegram_enabled === 'true';
@@ -64,6 +64,23 @@ export class TelegramNotificationProvider implements NotificationProvider {
         error: 'Telegram Bot Token or Chat ID is not configured.',
       };
     }
+
+    const topicRaw = settings.telegram_topic_id?.trim();
+    const topicId = topicRaw ? Number(topicRaw) : null;
+    if (topicRaw && (!/^\d+$/.test(topicRaw) || topicId === null || !Number.isSafeInteger(topicId) || topicId <= 0)) {
+      return {
+        channelId: this.id,
+        name: this.name,
+        success: false,
+        error: 'Telegram Topic / Thread ID must be a positive integer, for example the last number in a topic link.',
+      };
+    }
+
+    const requestBase = {
+      chat_id: chatId,
+      disable_web_page_preview: false,
+      ...(topicId ? { message_thread_id: topicId } : {}),
+    };
 
     const { repo, release } = payload;
     const template =
@@ -121,10 +138,9 @@ export class TelegramNotificationProvider implements NotificationProvider {
       const response = await axios.post(
         url,
         {
-          chat_id: chatId,
+          ...requestBase,
           text: markdownText,
           parse_mode: 'Markdown',
-          disable_web_page_preview: false,
         },
         { timeout: 10000 }
       );
@@ -154,7 +170,11 @@ export class TelegramNotificationProvider implements NotificationProvider {
         lowerDesc.includes('blocked') ||
         lowerDesc.includes('deactivated') ||
         lowerDesc.includes('kicked') ||
-        lowerDesc.includes('not a member');
+        lowerDesc.includes('not a member') ||
+        lowerDesc.includes('message thread') ||
+        lowerDesc.includes('not a forum') ||
+        lowerDesc.includes('topic_closed') ||
+        lowerDesc.includes('topic_id_invalid');
 
       // If Telegram rejected Markdown entity parsing (or any other formatting 400), retry as plain text
       if (status === 400 && !isUnrecoverableChatError) {
@@ -162,9 +182,8 @@ export class TelegramNotificationProvider implements NotificationProvider {
           const fallbackResponse = await axios.post(
             url,
             {
-              chat_id: chatId,
+              ...requestBase,
               text: plainText,
-              disable_web_page_preview: false,
             },
             { timeout: 10000 }
           );
